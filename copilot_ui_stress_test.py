@@ -96,23 +96,30 @@ ALT_SEND_BUTTON_NAME = "Snakk med Copilot"
 def dump_control_tree_via_script():
     """
     Kaller den separate debug-scriptet for å dumpe kontrolltre
+    Dette er en påkrevd fallback-mekanisme for UI-inspeksjon
     """
     try:
         script_path = os.path.join(os.path.dirname(__file__), "copilot_ui_debug.py")
         if os.path.exists(script_path):
-            print("📋 Kjører separat debug-script for kontrolltre...")
+            print("📋 Kjører separat debug-script for kontrolltre (required fallback)...")
             result = subprocess.run([sys.executable, script_path], 
                                   capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
+                print("✅ Debug-script kjørt vellykket:")
                 print(result.stdout)
             else:
-                print(f"⚠️ Debug-script feilet: {result.stderr}")
+                print(f"⚠️ Debug-script feilet med returkode {result.returncode}:")
+                print(f"STDERR: {result.stderr}")
+                if result.stdout:
+                    print(f"STDOUT: {result.stdout}")
         else:
-            print(f"⚠️ Debug-script ikke funnet: {script_path}")
+            print(f"❌ KRITISK: Debug-script ikke funnet: {script_path}")
+            print("💡 Debug-scriptet er en påkrevd fallback-mekanisme og må være tilgjengelig")
     except subprocess.TimeoutExpired:
-        print("⚠️ Debug-script timeout")
+        print("⚠️ Debug-script timeout etter 30 sekunder")
     except Exception as e:
-        print(f"⚠️ Feil ved kjøring av debug-script: {e}")
+        print(f"❌ Feil ved kjøring av debug-script: {type(e).__name__}: {e}")
+        print("💡 Debug-scriptet er en påkrevd fallback-mekanisme for UI-inspeksjon")
 
 def validate_window(window):
     """
@@ -165,7 +172,6 @@ def main():
     
     # Track success/failure for exit code
     success_count = 0
-    failed_first_element_lookup = False
 
     try:
         print("🔗 Kobler til Copilot-vindu (regex-match)...")
@@ -240,14 +246,14 @@ def main():
                             raise ElementNotFoundError("Fallback text box disabled")
                     except ElementNotFoundError:
                         print(f"❌ Tekstfelt ikke tilgjengelig for melding {i}")
-                        if i == 1 and not failed_first_element_lookup:
-                            failed_first_element_lookup = True
-                            print("📋 Første element-feil - dumper kontrolltre for feilsøking:")
-                            try:
-                                window.print_control_identifiers()
-                            except Exception as tree_error:
-                                print(f"⚠️ Kunne ikke dumpe kontrolltre: {tree_error}")
-                                dump_control_tree_via_script()
+                        # Always invoke debug script when UI elements fail - required fallback mechanism
+                        print("📋 Dumper kontrolltre for feilsøking (required fallback):")
+                        try:
+                            window.print_control_identifiers()
+                        except Exception as tree_error:
+                            print(f"⚠️ Kunne ikke dumpe kontrolltre direkte: {tree_error}")
+                        # Always call debug script as required fallback mechanism
+                        dump_control_tree_via_script()
                         continue
 
                 # Type message into text box
@@ -283,14 +289,14 @@ def main():
                             raise ElementNotFoundError("Fallback send button disabled")
                     except ElementNotFoundError:
                         print(f"❌ Sendeknapp ikke tilgjengelig for melding {i}")
-                        if i == 1 and not failed_first_element_lookup:
-                            failed_first_element_lookup = True
-                            print("📋 Første element-feil - dumper kontrolltre for feilsøking:")
-                            try:
-                                window.print_control_identifiers()
-                            except Exception as tree_error:
-                                print(f"⚠️ Kunne ikke dumpe kontrolltre: {tree_error}")
-                                dump_control_tree_via_script()
+                        # Always invoke debug script when UI elements fail - required fallback mechanism
+                        print("📋 Dumper kontrolltre for feilsøking (required fallback):")
+                        try:
+                            window.print_control_identifiers()
+                        except Exception as tree_error:
+                            print(f"⚠️ Kunne ikke dumpe kontrolltre direkte: {tree_error}")
+                        # Always call debug script as required fallback mechanism
+                        dump_control_tree_via_script()
                         continue
 
                 # Click send button
