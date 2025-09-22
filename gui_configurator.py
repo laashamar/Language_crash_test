@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QPushButton, QTextEdit, QFileDialog, QMessageBox, QSplitter,
     QDoubleSpinBox, QTabWidget, QGroupBox, QScrollArea
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QObject, QThread, Signal
 from PySide6.QtGui import QTextCursor, QFont
 import sys
 import logging
@@ -11,6 +11,50 @@ from io import StringIO
 from pathlib import Path
 from generator import generate_messages
 from config import Config
+import copilot_ui_stress_test  # Importer for å kunne kjøre testen
+
+# --- NY ARBEIDERKLASSE FOR STRESSTEST ---
+class StressTestWorker(QObject):
+    """Kjører stresstesten i en separat tråd for å unngå at GUI-en fryser."""
+    progress = Signal(str)  # Signal for å sende loggmeldinger
+    finished = Signal()     # Signal for når testen er ferdig
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+    def run(self):
+        """Hovedmetoden som kjører testen."""
+        try:
+            # Sett opp en midlertidig logger for å fange output fra stresstesten
+            log_stream = StringIO()
+            handler = logging.StreamHandler(log_stream)
+            handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            
+            # Bruk root logger for å fange alt
+            logger = logging.getLogger()
+            original_level = logger.level
+            logger.setLevel(logging.INFO)
+            logger.addHandler(handler)
+
+            # Sett konfigurasjonen for testmodulen
+            copilot_ui_stress_test.set_config(self.config)
+            
+            # Start selve testen
+            copilot_ui_stress_test.main()
+
+            # Hent og send logg-output
+            log_contents = log_stream.getvalue()
+            self.progress.emit(log_contents)
+
+            # Gjenopprett logger
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
+
+        except Exception as e:
+            self.progress.emit(f"❌ En kritisk feil oppstod under testen: {e}\n")
+        finally:
+            self.finished.emit()
 
 
 class Configurator(QWidget):
@@ -18,15 +62,14 @@ class Configurator(QWidget):
     
     def __init__(self):
         super().__init__()
-        self.config = Config()  # Load default config
+        self.config = Config()
         self.setWindowTitle("Copilot UI Stress Test Configurator")
         self.setMinimumSize(800, 600)
         self.setup_ui()
+        self.thread = None  # Holder referanse til arbeidstråden
         
     def setup_ui(self):
-        """Setup the enhanced UI with scrollable output field."""
-        main_layout = QVBoxLayout()
-        
+        # ... (resten av UI-koden er uendret)
         # Create splitter for upper config and lower output
         splitter = QSplitter(Qt.Vertical)
         
@@ -46,6 +89,7 @@ class Configurator(QWidget):
         self.spin_count = QSpinBox()
         self.spin_count.setRange(1, 1000)
         self.spin_count.setValue(self.config.number_of_messages)
+        self.spin_count.valueChanged.connect(self.show_preview)
         config_layout.addWidget(self.spin_count)
         
         # Wait time between messages
@@ -105,6 +149,30 @@ class Configurator(QWidget):
         window_layout.addWidget(self.edit_window_regex)
         
         advanced_layout.addWidget(window_group)
+        
+        # Debugging settings
+        debug_group = QGroupBox("⚙️ Debugging Settings")
+        debug_layout = QVBoxLayout(debug_group)
+
+        debug_layout.addWidget(QLabel("Debug script timeout (seconds):"))
+        self.spin_debug_timeout = QSpinBox()
+        self.spin_debug_timeout.setRange(10, 120)
+        self.spin_debug_timeout.setValue(self.config.debug_output_timeout)
+
+        tooltip_text = """
+        Sets how long the script waits for the UI analysis to complete.
+        Increase this on slower computers.
+
+        Anbefalinger:
+        - Ny CPU, 16GB RAM: 20-30 sekunder
+        - ~5 år gammel CPU, 8GB RAM: 30-45 sekunder
+        - Eldre CPU, 4GB RAM: 45-60 sekunder
+        """
+        self.spin_debug_timeout.setToolTip(tooltip_text.strip())
+        debug_layout.addWidget(self.spin_debug_timeout)
+
+        advanced_layout.addWidget(debug_group)
+        
         advanced_layout.addStretch()
         
         config_widget.addTab(advanced_tab, "Advanced")
@@ -169,8 +237,40 @@ class Configurator(QWidget):
         # Initial preview
         self.show_preview()
 
+    # --- START_TEST ER HELT OMSKREVET ---
+    def start_test(self):
+        """Starter stresstesten i en bakgrunnstråd."""
+        self.btn_start.setEnabled(False)  # Deaktiver knappen for å unngå flere trykk
+        self.append_output("=" * 50 + "\n")
+        self.append_output("🚀 Initialiserer stresstest...\n")
+        
+        # 1. Hent nåværende konfigurasjon
+        config = self.get_current_config()
+        
+        # 2. Sett opp tråd og arbeider
+        self.thread = QThread()
+        self.worker = StressTestWorker(config)
+        self.worker.moveToThread(self.thread)
+        
+        # 3. Koble signaler og slots
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.worker.progress.connect(self.append_output)
+        self.worker.finished.connect(self.on_test_finished) # Koble til en ny metode for opprydding
+        
+        # 4. Start tråden
+        self.thread.start()
+
+    def on_test_finished(self):
+        """Kalles når bakgrunnstråden er ferdig."""
+        self.append_output("🎉 Testen er fullført.\n")
+        self.btn_start.setEnabled(True)  # Aktiver knappen igjen
+        QMessageBox.information(self, "Test Fullført", "Stresstesten er ferdig.")
+
     def append_output(self, text):
-        """Append text to the output area."""
+        """Legger til tekst i output-området."""
         cursor = self.output_area.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
@@ -178,11 +278,12 @@ class Configurator(QWidget):
         self.output_area.ensureCursorVisible()
 
     def clear_output(self):
-        """Clear the output area."""
+        """Tømmer output-området."""
         self.output_area.clear()
-        self.append_output("Output cleared.\n")
+        self.append_output("Output tømt.\n")
 
-    def save_log(self):
+    # ... (alle andre metoder fra get_current_config og nedover er uendret) ...
+    def save_log(self, *args, **kwargs):
         """Save the current output to a file."""
         filename, _ = QFileDialog.getSaveFileName(
             self, "Save Log", "stress_test_log.txt", "Text files (*.txt)"
@@ -192,21 +293,28 @@ class Configurator(QWidget):
                 f.write(self.output_area.toPlainText())
             self.append_output(f"Log saved to {filename}\n")
 
-    def get_current_config(self):
-        """Get current configuration from UI."""
+    def get_current_config(self, *args, **kwargs):
+        """Get current configuration from UI and regenerate messages."""
         config = Config()
         config.number_of_messages = self.spin_count.value()
         config.wait_time_seconds = self.spin_wait.value()
         config.window_title_regex = self.edit_window_regex.toPlainText().strip()
+        config.debug_output_timeout = self.spin_debug_timeout.value()
+        
+        # Regenerate sample messages to match the final count before saving/running
+        config.regenerate_sample_messages()
+        
         return config
 
-    def load_config_to_ui(self, config):
+    def load_config_to_ui(self, *args, **kwargs):
+        config = args[0] if args else kwargs.get('config')
         """Load configuration into UI."""
         self.spin_count.setValue(config.number_of_messages)
         self.spin_wait.setValue(config.wait_time_seconds)
         self.edit_window_regex.setPlainText(config.window_title_regex)
+        self.spin_debug_timeout.setValue(config.debug_output_timeout)
 
-    def save_config(self):
+    def save_config(self, *args, **kwargs):
         """Save current configuration to file."""
         filename, _ = QFileDialog.getSaveFileName(
             self, "Save Configuration", "config.json", "JSON files (*.json)"
@@ -220,7 +328,7 @@ class Configurator(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save configuration: {e}")
 
-    def load_config(self):
+    def load_config(self, *args, **kwargs):
         """Load configuration from file."""
         filename, _ = QFileDialog.getOpenFileName(
             self, "Load Configuration", "", "JSON files (*.json)"
@@ -235,7 +343,7 @@ class Configurator(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load configuration: {e}")
 
-    def get_language_mode(self):
+    def get_language_mode(self, *args, **kwargs):
         """Get selected language mode."""
         if self.radio_os.isChecked():
             return "os"
@@ -244,51 +352,29 @@ class Configurator(QWidget):
         else:
             return "both"
 
-    def show_preview(self):
-        """Show preview of generated messages."""
+    def show_preview(self, *args, **kwargs):
+        """
+        Update the internal config, regenerate messages based on the current
+        UI value, and show a preview.
+        """
         try:
-            count = min(5, self.spin_count.value())
-            messages = generate_messages(count)
-            self.preview.setPlainText("\n".join(messages))
-            self.append_output(f"Generated preview with {count} messages\n")
+            # Update the internal config object with the current value from the UI
+            current_count = self.spin_count.value()
+            self.config.number_of_messages = current_count
+            
+            # Regenerate the messages based on the new count
+            self.config.regenerate_sample_messages()
+            
+            # Show a small subset of the newly generated messages in the preview
+            preview_count = min(5, current_count)
+            preview_messages = self.config.sample_messages[:preview_count]
+            
+            self.preview.setPlainText("\n".join(preview_messages))
+            self.append_output(f"Preview updated for {current_count} messages.\n")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate preview: {e}")
 
-    def start_test(self):
-        """Start the stress test with current configuration."""
-        try:
-            self.append_output("=" * 50 + "\n")
-            self.append_output("Starting Copilot UI Stress Test...\n")
-            
-            # Get current config
-            config = self.get_current_config()
-            lang_mode = self.get_language_mode()
-            
-            self.append_output(f"Configuration: {config.get_runtime_summary()}\n")
-            self.append_output(f"Language mode: {lang_mode}\n")
-            
-            # Save current config
-            config.save_to_file("current_session_config.json")
-            
-            # Here you would integrate with the actual stress test
-            # For now, we'll just simulate it
-            self.append_output("Test configuration saved.\n")
-            self.append_output("To run the actual test, use: python main.py --config current_session_config.json\n")
-            
-            QMessageBox.information(
-                self, 
-                "Test Ready", 
-                f"Test configured with {config.number_of_messages} messages.\n"
-                f"Configuration saved to current_session_config.json\n\n"
-                f"To run the test, execute:\n"
-                f"python main.py --config current_session_config.json"
-            )
-            
-        except Exception as e:
-            self.append_output(f"Error starting test: {e}\n")
-            QMessageBox.critical(self, "Error", f"Failed to start test: {e}")
-
-    def export_messages(self):
+    def export_messages(self, *args, **kwargs):
         """Export generated messages to file."""
         try:
             filename, _ = QFileDialog.getSaveFileName(
@@ -308,9 +394,9 @@ class Configurator(QWidget):
             self.append_output(f"Error exporting messages: {e}\n")
             QMessageBox.critical(self, "Error", f"Failed to export messages: {e}")
 
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = Configurator()
     window.show()
     sys.exit(app.exec())
+
