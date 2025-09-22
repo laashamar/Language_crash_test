@@ -13,7 +13,12 @@ Krav:
 import time
 import random
 from pywinauto import Application
-from pywinauto.findwindows import ElementNotFoundError, MatchError
+from pywinauto.findwindows import ElementNotFoundError
+from pywinauto.findbestmatch import MatchErrorimport time
+import random
+from pywinauto import Application
+from pywinauto.findwindows import ElementNotFoundError
+from pywinauto.findbestmatch import MatchError
 
 # =============================================================================
 # KONFIGURASJON
