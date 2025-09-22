@@ -1,19 +1,30 @@
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QRadioButton,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QPushButton, QTextEdit, QFileDialog, QMessageBox, QSplitter,
     QDoubleSpinBox, QTabWidget, QGroupBox
 )
 from PySide6.QtCore import Qt, QObject, QThread, Signal
 from PySide6.QtGui import QTextCursor, QFont
 import sys
-import logging
+import contextlib
 from io import StringIO
 from config import Config
 import copilot_ui_stress_test
 
-# --- ARBEIDERKLASSE FOR STRESSTEST I EGEN TRÅD ---
+# --- NY HJELPEKLASSE FOR SANNTIDS LOGGING ---
+class StreamToSignal(QObject):
+    """En klasse som omdirigerer sys.stdout til et Qt-signal."""
+    text_written = Signal(str)
+
+    def write(self, text):
+        self.text_written.emit(str(text))
+
+    def flush(self):
+        pass  # Nødvendig for å etterligne en fil-lignende objekt
+
+# --- OPPDATERT ARBEIDERKLASSE ---
 class StressTestWorker(QObject):
-    """Kjører stresstesten i en separat tråd for å unngå at GUI-en fryser."""
+    """Kjører stresstesten i en separat tråd med sanntids-output."""
     progress = Signal(str)
     finished = Signal()
 
@@ -22,31 +33,18 @@ class StressTestWorker(QObject):
         self.config = config
 
     def run(self):
-        """Hovedmetoden som kjører selve testen."""
+        """Hovedmetoden som kjører testen."""
+        # Opprett omdirigeringsobjektet og koble det til progress-signalet
+        stdout_redirector = StreamToSignal()
+        stdout_redirector.text_written.connect(self.progress.emit)
+
         try:
-            # Sett opp en midlertidig logger for å fange output
-            log_stream = StringIO()
-            handler = logging.StreamHandler(log_stream)
-            handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-            
-            logger = logging.getLogger()
-            original_level = logger.level
-            logger.setLevel(logging.INFO)
-            logger.addHandler(handler)
-
-            # Sett konfigurasjonen for testmodulen og kjør den
-            copilot_ui_stress_test.set_config(self.config)
-            copilot_ui_stress_test.main()
-
-            # Hent og send logg-output tilbake til GUI-tråden
-            log_contents = log_stream.getvalue()
-            self.progress.emit(log_contents)
-
-            # Gjenopprett den opprinnelige loggeren
-            logger.removeHandler(handler)
-            logger.setLevel(original_level)
-
+            # Omdiriger stdout for varigheten av denne metoden
+            with contextlib.redirect_stdout(stdout_redirector):
+                copilot_ui_stress_test.set_config(self.config)
+                copilot_ui_stress_test.main()
         except Exception as e:
+            # Send feilmeldingen også gjennom signalet
             self.progress.emit(f"❌ En kritisk feil oppstod under testen: {e}\n")
         finally:
             self.finished.emit()
@@ -60,30 +58,26 @@ class Configurator(QWidget):
         self.config = Config()
         self.setWindowTitle("Copilot UI Stress Test Configurator")
         self.setMinimumSize(800, 600)
-        self.thread = None  # Holder referanse til arbeidstråden
+        self.thread = None
         self.setup_ui()
         
     def setup_ui(self):
         """Setter opp brukergrensesnittet."""
-        main_layout = QVBoxLayout() # <-- KORREKSJON: Definer hovedlayoutet
+        main_layout = QVBoxLayout()
 
         splitter = QSplitter(Qt.Vertical)
         config_widget = QTabWidget()
         
-        # --- Fanen for Grunnleggende Innstillinger ---
         basic_tab = QWidget()
         basic_layout = QVBoxLayout(basic_tab)
-        
         config_group = QGroupBox("📊 Test Configuration")
         config_layout = QVBoxLayout(config_group)
-        
         config_layout.addWidget(QLabel("✍️ Number of messages:"))
         self.spin_count = QSpinBox()
         self.spin_count.setRange(1, 1000)
         self.spin_count.setValue(self.config.number_of_messages)
         self.spin_count.valueChanged.connect(self.show_preview)
         config_layout.addWidget(self.spin_count)
-        
         config_layout.addWidget(QLabel("⏱️ Wait time between messages (seconds):"))
         self.spin_wait = QDoubleSpinBox()
         self.spin_wait.setRange(0.1, 10.0)
@@ -102,10 +96,8 @@ class Configurator(QWidget):
         basic_layout.addStretch()
         config_widget.addTab(basic_tab, "Basic Config")
         
-        # --- Fanen for Avanserte Innstillinger ---
         advanced_tab = QWidget()
         advanced_layout = QVBoxLayout(advanced_tab)
-        
         window_group = QGroupBox("🪟 Window Detection")
         window_layout = QVBoxLayout(window_group)
         window_layout.addWidget(QLabel("Window title regex:"))
@@ -124,7 +116,6 @@ class Configurator(QWidget):
         tooltip_text = """
         Sets how long the script waits for the UI analysis to complete.
         Increase this on slower computers.
-
         Anbefalinger:
         - Ny CPU, 16GB RAM: 20-30 sekunder
         - ~5 år gammel CPU, 8GB RAM: 30-45 sekunder
@@ -138,7 +129,6 @@ class Configurator(QWidget):
         
         splitter.addWidget(config_widget)
         
-        # --- Nedre del: Output og Logger ---
         output_group = QGroupBox("📄 Runtime Output & Logs")
         output_layout = QVBoxLayout(output_group)
         self.output_area = QTextEdit()
@@ -161,7 +151,6 @@ class Configurator(QWidget):
         splitter.setSizes([360, 240])
         main_layout.addWidget(splitter)
         
-        # --- Handlingsknapper nederst ---
         button_layout = QHBoxLayout()
         self.btn_save_config = QPushButton("💾 Save Config")
         self.btn_save_config.clicked.connect(self.save_config)
@@ -180,7 +169,6 @@ class Configurator(QWidget):
         self.show_preview()
 
     def start_test(self):
-        """Starter stresstesten i en bakgrunnstråd."""
         if self.thread and self.thread.isRunning():
             QMessageBox.warning(self, "Test Kjører", "En test kjører allerede.")
             return
@@ -204,13 +192,11 @@ class Configurator(QWidget):
         self.thread.start()
 
     def on_test_finished(self):
-        """Kalles når bakgrunnstråden er ferdig."""
         self.append_output("🎉 Testen er fullført.\n")
         self.btn_start.setEnabled(True)
         QMessageBox.information(self, "Test Fullført", "Stresstesten er ferdig.")
 
     def append_output(self, text):
-        """Legger til tekst i output-området."""
         cursor = self.output_area.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
@@ -260,7 +246,6 @@ class Configurator(QWidget):
         self.config.regenerate_sample_messages()
         preview_count = min(5, current_count)
         self.preview.setPlainText("\n".join(self.config.sample_messages[:preview_count]))
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
