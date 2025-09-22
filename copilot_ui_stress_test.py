@@ -15,7 +15,7 @@ import time
 import random
 from pywinauto import Application
 from pywinauto.findbestmatch import MatchError
-from pywinauto.controls.uiawrapper import ElementNotFoundError
+from pywinauto.findwindows import ElementNotFoundError
 
 # =============================================================================
 # CONFIGURATION SECTION - USER EDITABLE PARAMETERS
