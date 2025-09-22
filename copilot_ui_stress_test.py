@@ -62,7 +62,7 @@ SAMPLE_MESSAGES = [
 # VERIFISERTE UI-IDENTIFIKATORER
 # =============================================================================
 
-WINDOW_TITLE_REGEX = r"^Copilot.*"
+WINDOW_TITLE_REGEX = r"^Copilot.*"  # Matcher både "Copilot" og "Copilot – Ny samtale"
 TEXT_BOX_AUTO_ID = "InputTextBox"
 SEND_BUTTON_AUTO_ID = "OldComposerMicButton"
 
@@ -84,6 +84,16 @@ def main():
         window = app.window(title_re=WINDOW_TITLE_REGEX)
         print("✅ Tilkobling til Copilot-vinduet vellykket")
 
+        # Åpne ny samtale ved å trykke på "Ny samtale"-knappen hvis den finnes
+        try:
+            new_chat_button = window.child_window(title="Ny samtale", control_type="Button")
+            if new_chat_button.exists() and new_chat_button.is_enabled():
+                new_chat_button.click_input()
+                print("🆕 Ny samtale startet")
+                time.sleep(1)  # Gi UI tid til å oppdatere
+        except ElementNotFoundError:
+            print("ℹ️ Ny samtale-knapp ikke funnet – fortsetter med eksisterende samtale")
+
         print("🔄 Starter meldingssløyfe...")
 
         for i in range(1, NUMBER_OF_MESSAGES + 1):
@@ -102,7 +112,7 @@ def main():
                     text_box = window.child_window(control_type=ALT_TEXT_BOX_CONTROL_TYPE)
                     if not text_box.exists():
                         print(f"❌ Tekstfelt ikke tilgjengelig for melding {i}")
-                        if i == 3:
+                        if i == 1:
                             print("📋 Dumper kontrolltre for feilsøking:")
                             window.print_control_identifiers()
                         continue
@@ -121,11 +131,15 @@ def main():
                     print("⚠️  Primær sendeknapp feilet, prøver fallback...")
                     send_button = window.child_window(title=ALT_SEND_BUTTON_NAME)
                     if not send_button.exists():
-                        print(f"❌ Sendeknapp ikke tilgjengelig for melding {i}")
+                        print(f"❌ Sendeknapp ikke tilgjengelig eller deaktivert for melding {i}")
                         continue
 
-                send_button.click()
-                print("🚀 Sendeknapp klikket")
+                if send_button.is_enabled():
+                    send_button.click()
+                    print("🚀 Sendeknapp klikket")
+                else:
+                    print(f"❌ Sendeknapp finnes men er deaktivert for melding {i}")
+                    continue
 
                 if i < NUMBER_OF_MESSAGES:
                     time.sleep(WAIT_TIME_SECONDS)
