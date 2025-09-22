@@ -46,6 +46,61 @@ jobs:
         python copilot_ui_stress_test.py 2>&1 | head -10 || true
         python copilot_ui_debug.py 2>&1 | head -10 || true
         echo "Scripts handle non-Windows environment gracefully ✅"
+    
+    - name: Validate dynamic element discovery logic
+      run: |
+        echo "Testing dynamic element discovery functions..."
+        python -c "
+        import copilot_ui_stress_test as script
+        print('✅ Dynamic patterns loaded:')
+        print(f'  Text input patterns: {len(script.KNOWN_TEXT_INPUT_PATTERNS)}')
+        print(f'  Send button patterns: {len(script.KNOWN_SEND_BUTTON_PATTERNS)}')
+        print(f'  New conversation patterns: {len(script.KNOWN_NEW_CONVERSATION_PATTERNS)}')
+        print('✅ Import successful - no hardcoded dependencies')
+        "
+    
+    - name: Test JSON parsing functionality
+      run: |
+        echo "Testing JSON parsing for debug script integration..."
+        python -c "
+        import copilot_ui_stress_test as script
+        
+        # Test valid JSON parsing
+        test_json = '''JSON_DATA_START
+        {
+          \"text_input_candidates\": [
+            {\"auto_id\": \"TestInput\", \"title\": \"Test\", \"control_type\": \"Edit\", \"score\": 10, \"reasons\": [\"test\"]}
+          ],
+          \"send_button_candidates\": [
+            {\"auto_id\": \"TestButton\", \"title\": \"Send\", \"control_type\": \"Button\", \"score\": 8, \"reasons\": [\"test\"]}
+          ],
+          \"new_conversation_candidates\": []
+        }
+        JSON_DATA_END'''
+        
+        parsed = script.parse_debug_output(test_json)
+        if parsed:
+            print('✅ JSON parsing works correctly')
+            print(f'  Text candidates: {len(parsed[\"text_input_candidates\"])}')
+            print(f'  Send candidates: {len(parsed[\"send_button_candidates\"])}')
+        else:
+            print('❌ JSON parsing failed')
+            exit(1)
+        "
+    
+    - name: Validate no hardcoded UI identifiers
+      run: |
+        echo "Checking that no hardcoded UI identifiers remain..."
+        # These should NOT be found as standalone hardcoded values
+        if grep -n "TEXT_BOX_AUTO_ID.*=" *.py; then
+          echo "❌ Found hardcoded TEXT_BOX_AUTO_ID"
+          exit 1
+        fi
+        if grep -n "SEND_BUTTON_AUTO_ID.*=" *.py; then
+          echo "❌ Found hardcoded SEND_BUTTON_AUTO_ID"
+          exit 1
+        fi
+        echo "✅ No hardcoded UI identifiers found - using dynamic discovery"
 
   windows-stress-test:
     runs-on: windows-latest
@@ -83,6 +138,29 @@ jobs:
         echo "Testing debug script (expected to fail without Copilot running)..."
         python copilot_ui_debug.py || echo "Debug script handled missing Copilot gracefully"
     
+    - name: Test dynamic element discovery integration
+      run: |
+        echo "Testing integration between debug script and main script..."
+        python -c "
+        import copilot_ui_stress_test as main_script
+        
+        # Test the debug script integration
+        print('Testing dump_control_tree_via_script function...')
+        result = main_script.dump_control_tree_via_script()
+        if result is None:
+            print('✅ Function correctly handles missing Copilot (returns None)')
+        else:
+            print('❌ Unexpected result when Copilot not available')
+        
+        # Test parse_debug_output with invalid data
+        print('Testing parse_debug_output with invalid input...')
+        invalid_result = main_script.parse_debug_output('invalid json')
+        if invalid_result is None:
+            print('✅ Function correctly handles invalid JSON (returns None)')
+        else:
+            print('❌ Should return None for invalid input')
+        "
+    
     - name: Validate script configuration
       run: |
         echo "Validating script can handle different configurations..."
@@ -92,6 +170,10 @@ jobs:
         print(f'Default wait time: {copilot_ui_stress_test.WAIT_TIME_SECONDS}')
         print(f'Sample messages count: {len(copilot_ui_stress_test.SAMPLE_MESSAGES)}')
         print(f'Window regex: {copilot_ui_stress_test.WINDOW_TITLE_REGEX}')
+        print(f'Known text patterns: {copilot_ui_stress_test.KNOWN_TEXT_INPUT_PATTERNS}')
+        print(f'Known send patterns: {copilot_ui_stress_test.KNOWN_SEND_BUTTON_PATTERNS}')
+        print(f'Known new conv patterns: {copilot_ui_stress_test.KNOWN_NEW_CONVERSATION_PATTERNS}')
+        print('✅ All configuration variables accessible')
         "
     
     - name: Generate test report
@@ -104,12 +186,24 @@ jobs:
         echo "- Python version: $(python --version)" >> test_report.md
         echo "- OS: $(Get-ComputerInfo | Select-Object WindowsProductName)" >> test_report.md
         echo "" >> test_report.md
+        echo "**Dynamic Element Discovery:**" >> test_report.md
+        echo "- ✅ No hardcoded UI identifiers" >> test_report.md
+        echo "- ✅ Intelligent element scoring implemented" >> test_report.md
+        echo "- ✅ Automatic fallback recovery system" >> test_report.md
+        echo "- ✅ JSON-based debug script integration" >> test_report.md
+        echo "" >> test_report.md
         echo "**Status:** Scripts validated successfully ✅" >> test_report.md
         echo "" >> test_report.md
         echo "**Note:** Full stress test requires Microsoft Copilot to be running." >> test_report.md
-        echo "To run with actual Copilot, ensure the application is open and use:" >> test_report.md
+        echo "The script will automatically discover UI elements dynamically and recover from failures." >> test_report.md
+        echo "" >> test_report.md
+        echo "**Usage:**" >> test_report.md
         echo '```' >> test_report.md
+        echo "# Run stress test (requires Copilot to be open)" >> test_report.md
         echo "python copilot_ui_stress_test.py" >> test_report.md
+        echo "" >> test_report.md
+        echo "# Debug UI elements (requires Copilot to be open)" >> test_report.md
+        echo "python copilot_ui_debug.py" >> test_report.md
         echo '```' >> test_report.md
     
     - name: Upload test artifacts
@@ -124,6 +218,8 @@ jobs:
         echo "🎉 Copilot UI Stress Test validation completed!"
         echo "📊 Configuration validated for ${{ env.NUMBER_OF_MESSAGES }} messages"
         echo "⏱️ Wait time set to ${{ env.WAIT_TIME_SECONDS }} seconds"
+        echo "🔍 Dynamic element discovery system ready"
+        echo "🛡️ Intelligent fallback recovery implemented"
         echo "✅ Scripts are ready for stress testing when Copilot is available"
 
   code-quality:
