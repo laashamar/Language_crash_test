@@ -84,7 +84,7 @@ SAMPLE_MESSAGES = [
 # Replace these placeholder values with the actual identifiers from your system:
 
 # Main window identifier - try window title or process name
-COPILOT_WINDOW_TITLE = "Microsoft Copilot"  # Placeholder: Replace with actual window title
+COPILOT_WINDOW_TITLE = "Copilot"  # Placeholder: Replace with actual window title
 
 # Text input field identifier - could be AutomationId, control type, or name
 TEXT_BOX_AUTO_ID = "TextInput"  # Placeholder: Replace with actual text box identifier
