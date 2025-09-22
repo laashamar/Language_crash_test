@@ -63,7 +63,7 @@ class Config:
     debug_output_timeout: int = 30
     
     def __post_init__(self):
-        """Initialize default values for list fields."""
+        """Initialize default values for list fields and generate messages."""
         if self.text_input_patterns is None:
             self.text_input_patterns = [
                 "InputTextBox",          # Most common technical ID
@@ -95,9 +95,19 @@ class Config:
         if self.button_control_types is None:
             self.button_control_types = ["Button", "Custom", "MenuItem"]
         
+        # Generate sample messages only if they haven't been loaded from a file
         if self.sample_messages is None:
-            # Generate default sample messages using the generator module
+            self.regenerate_sample_messages()
+
+    def regenerate_sample_messages(self):
+        """
+        Generate a new list of sample messages based on number_of_messages.
+        This ensures the message list is always in sync with the configuration.
+        """
+        if self.number_of_messages > 0:
             self.sample_messages = generate_messages(self.number_of_messages)
+        else:
+            self.sample_messages = []
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for JSON serialization."""
