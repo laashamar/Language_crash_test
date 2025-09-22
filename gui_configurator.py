@@ -7,11 +7,11 @@ from PySide6.QtCore import Qt, QObject, QThread, Signal
 from PySide6.QtGui import QTextCursor, QFont
 import sys
 import contextlib
-from io import StringIO
+import logging
 from config import Config
 import copilot_ui_stress_test
 
-# --- NY HJELPEKLASSE FOR SANNTIDS LOGGING ---
+# --- HJELPEKLASSE FOR SANNTIDS LOGGING ---
 class StreamToSignal(QObject):
     """En klasse som omdirigerer sys.stdout til et Qt-signal."""
     text_written = Signal(str)
@@ -20,7 +20,7 @@ class StreamToSignal(QObject):
         self.text_written.emit(str(text))
 
     def flush(self):
-        pass  # Nødvendig for å etterligne en fil-lignende objekt
+        pass
 
 # --- OPPDATERT ARBEIDERKLASSE ---
 class StressTestWorker(QObject):
@@ -31,21 +31,26 @@ class StressTestWorker(QObject):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.result = {}
 
     def run(self):
         """Hovedmetoden som kjører testen."""
-        # Opprett omdirigeringsobjektet og koble det til progress-signalet
         stdout_redirector = StreamToSignal()
         stdout_redirector.text_written.connect(self.progress.emit)
+        
+        # Bruk en logger for å fange opp interne feil i testlogikken
+        # Vi sender ikke dette til GUI, men det er god praksis.
+        logger = logging.getLogger("gui_worker")
+        logger.addHandler(logging.NullHandler()) # Forhindrer "No handler found"
 
         try:
             # Omdiriger stdout for varigheten av denne metoden
             with contextlib.redirect_stdout(stdout_redirector):
-                copilot_ui_stress_test.set_config(self.config)
-                copilot_ui_stress_test.main()
+                # Kaller den nye, refaktorerte funksjonen som returnerer et resultat
+                self.result = copilot_ui_stress_test.run_stress_test_logic(self.config, logger)
         except Exception as e:
-            # Send feilmeldingen også gjennom signalet
-            self.progress.emit(f"❌ En kritisk feil oppstod under testen: {e}\n")
+            self.progress.emit(f"❌ En kritisk feil oppstod i workeren: {e}\n")
+            self.result = {'error': str(e), 'success': 0, 'total': self.config.number_of_messages}
         finally:
             self.finished.emit()
 
@@ -59,6 +64,7 @@ class Configurator(QWidget):
         self.setWindowTitle("Copilot UI Stress Test Configurator")
         self.setMinimumSize(800, 600)
         self.thread = None
+        self.worker = None
         self.setup_ui()
         
     def setup_ui(self):
@@ -174,7 +180,8 @@ class Configurator(QWidget):
             return
 
         self.btn_start.setEnabled(False)
-        self.append_output("=" * 50 + "\n🚀 Initialiserer stresstest...\n")
+        self.output_area.clear()
+        self.append_output("=" * 60 + "\n🚀 Initialiserer stresstest...\n")
         
         config = self.get_current_config()
         
@@ -183,24 +190,38 @@ class Configurator(QWidget):
         self.worker.moveToThread(self.thread)
         
         self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.on_test_finished)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.worker.progress.connect(self.append_output)
-        self.worker.finished.connect(self.on_test_finished)
         
         self.thread.start()
 
     def on_test_finished(self):
-        self.append_output("🎉 Testen er fullført.\n")
+        result = self.worker.result if self.worker else {}
+        success = result.get('success', 0)
+        total = result.get('total', self.get_current_config().number_of_messages)
+        error = result.get('error')
+
+        summary_message = ""
+        if error:
+            summary_message = f"Testen ble avsluttet med en kritisk feil:\n{error}"
+            QMessageBox.critical(self, "Test Feilet", summary_message)
+        else:
+            summary_message = f"Stresstesten er ferdig.\n\nResultat: {success} av {total} meldinger ble sendt."
+            QMessageBox.information(self, "Test Fullført", summary_message)
+
+        self.append_output("\n" + "=" * 60)
+        self.append_output(f"\n🎉 {summary_message}\n")
         self.btn_start.setEnabled(True)
-        QMessageBox.information(self, "Test Fullført", "Stresstesten er ferdig.")
 
     def append_output(self, text):
         cursor = self.output_area.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
         self.output_area.ensureCursorVisible()
+        QApplication.processEvents()
 
     def clear_output(self):
         self.output_area.clear()
@@ -232,13 +253,18 @@ class Configurator(QWidget):
         if filename:
             config = self.get_current_config()
             config.save_to_file(filename)
+            QMessageBox.information(self, "Lagret", f"Konfigurasjon lagret til {filename}")
 
     def load_config(self):
         filename, _ = QFileDialog.getOpenFileName(self, "Load Configuration", "", "JSON files (*.json)")
         if filename:
-            config = Config.load_from_file(filename)
-            self.load_config_to_ui(config)
-            self.config = config
+            try:
+                config = Config.load_from_file(filename)
+                self.load_config_to_ui(config)
+                self.config = config
+                QMessageBox.information(self, "Lastet", f"Konfigurasjon lastet fra {filename}")
+            except Exception as e:
+                QMessageBox.critical(self, "Feil ved lasting", f"Kunne ikke laste konfigurasjon:\n{e}")
 
     def show_preview(self):
         current_count = self.spin_count.value()
@@ -252,4 +278,3 @@ if __name__ == "__main__":
     window = Configurator()
     window.show()
     sys.exit(app.exec())
-
