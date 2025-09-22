@@ -39,76 +39,34 @@ except ImportError:
             after_clickinput_wait = 0
 
 # =============================================================================
-# KONFIGURASJON
-# =============================================================================
-
-NUMBER_OF_MESSAGES = 50
-WAIT_TIME_SECONDS = 0.5  # Raskere meldingsflyt
-
-# Optimaliser pywinauto-timings
-timings.Timings.window_find_timeout = 5
-timings.after_clickinput_wait = 0
-
-SAMPLE_MESSAGES = [
-    "Hello! How are you today? 😊",
-    "Can you help me with a coding problem? 🤔💻",
-    "What's the weather like? ☀️🌤️⛅",
-    "I'm working on a Python project 🐍✨",
-    "This is a stress test message 🧪⚡",
-    "Thank you for your assistance! 🙏😊",
-    "Can you explain machine learning? 🤖📚",
-    "I love programming! 💖👨‍💻",
-    "Have a great day! 🌟💫",
-    "Testing the UI automation 🔧⚙️",
-    "Hei! Hvordan har du det i dag? 😊🇳🇴",
-    "Kan du hjelpe meg med et kodeproblem? 🤔💻",
-    "Hvordan er været? ☀️❄️",
-    "Jeg jobber med et Python-prosjekt 🐍✨",
-    "Dette er en stresstest-melding 🧪⚡",
-    "Tusen takk for hjelpen! 🙏😊",
-    "Kan du forklare maskinlæring? 🤖📚",
-    "Jeg elsker å programmere! 💖👨‍💻",
-    "Ha en flott dag! 🌟💫",
-    "Tester UI-automatisering 🔧⚙️",
-    "Jeg bor i Norge 🇳🇴🏔️",
-    "Kaffe og kode er bra 😊☕💻",
-    "Rødt, gult og grønt 🔴🟡🟢",
-    "Ærlighet, øl og åpenhet 🍺💭",
-    "Bjørn går på lørdagstur 🐻🚶‍♂️",
-    "Hello! Jeg snakker både engelsk og norsk 🌍🗣️",
-    "Machine learning og kunstig intelligens 🤖🧠",
-    "Python programming med æ, ø, å karakterer 🐍📝"
-]
-
-# =============================================================================
 # DYNAMISKE UI-IDENTIFIKATORER (NO HARDCODED VALUES)
 # =============================================================================
 
 # Window detection uses dynamic regex pattern
 WINDOW_TITLE_REGEX = r"^Copilot.*"  # Matcher både "Copilot" og "Copilot – Ny samtale"
 
-# Known identifier patterns for prioritized fallback (NOT hardcoded - used for scoring)
+# Known identifier patterns for prioritized fallback (NOW NORWEGIAN-FRIENDLY)
 KNOWN_TEXT_INPUT_PATTERNS = [
-    "InputTextBox",  # Most commonly working pattern
-    "TextBox", 
+    "InputTextBox",          # Most common technical ID
+    "CIB-Compose-Box",       # Another potential technical ID
+    "TextBox",
     "MessageInput",
     "ChatInput"
 ]
 
 KNOWN_SEND_BUTTON_PATTERNS = [
-    "OldComposerMicButton",  # Most commonly working pattern  
+    "Snakk med Copilot",     # NORWEGIAN TITLE (Primary)
+    "OldComposerMicButton",  # Technical ID
     "SendButton",
-    "MicButton",
-    "SubmitButton"
+    "MicButton"
 ]
 
 KNOWN_NEW_CONVERSATION_PATTERNS = [
-    "Ny samtale",  # Norwegian
-    "New conversation",  # English
-    "New chat",
-    "Start new"
+    "Hjem",                  # NORWEGIAN TITLE (Primary, based on log)
+    "HomeButton",            # Technical ID
+    "Ny samtale",
+    "New conversation"
 ]
-
 # Control type fallbacks for dynamic discovery
 TEXT_INPUT_CONTROL_TYPES = ["Edit", "Text", "Document", "Custom"]
 BUTTON_CONTROL_TYPES = ["Button", "Custom", "MenuItem"]
