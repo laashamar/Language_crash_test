@@ -17,19 +17,16 @@ import argparse
 import logging
 from pathlib import Path
 
-# Import modules
-from config import Config
-import copilot_ui_stress_test
-import copilot_ui_debug
+# Import package modules
+from language_crash_test import Config, run_stress_test_logic, inspect_ui_elements, GUI_AVAILABLE
 
-# GUI imports (optional dependency)
-GUI_AVAILABLE = False
-try:
-    import gui_configurator
-    GUI_AVAILABLE = True
-except ImportError:
-    # GUI dependencies not available
-    pass
+# GUI imports (conditional)
+Configurator = None
+if GUI_AVAILABLE:
+    try:
+        from language_crash_test import Configurator
+    except ImportError:
+        GUI_AVAILABLE = False
 
 
 def setup_logging(config):
@@ -60,11 +57,30 @@ def run_stress_test(config):
     logger = setup_logging(config)
     logger.info("Starting Microsoft Copilot UI Stress Test")
     
-    # Set global config for the stress test module
-    copilot_ui_stress_test.set_config(config)
-    
     try:
-        copilot_ui_stress_test.main()
+        result = run_stress_test_logic(config, logger)
+        success_count = result.get('success', 0)
+        total_messages = result.get('total', 0)
+        error = result.get('error')
+
+        print("="*60)
+        if error:
+            print(f"❌ Test failed: {error}")
+            sys.exit(1)
+
+        print("🎉 Stress test completed!")
+        print(f"📊 Total sent: {success_count} of {total_messages} messages")
+
+        if success_count == 0:
+            print("❌ No messages sent - exiting with error")
+            sys.exit(1)
+        elif success_count < total_messages:
+            print(f"⚠️ {total_messages - success_count} messages failed - partial success")
+            sys.exit(0)
+        else:
+            print("✅ All messages sent successfully")
+            sys.exit(0)
+            
     except Exception as e:
         logger.error(f"Stress test failed: {e}")
         sys.exit(1)
@@ -72,14 +88,16 @@ def run_stress_test(config):
 
 def run_gui_configurator():
     """Launch the GUI configurator."""
-    if not GUI_AVAILABLE:
+    # Use the global GUI_AVAILABLE that was set at import time
+    import language_crash_test
+    if not language_crash_test.GUI_AVAILABLE:
         print("❌ GUI dependencies not available. Install with: pip install PySide6")
         sys.exit(1)
     
     try:
         from PySide6.QtWidgets import QApplication
         app = QApplication(sys.argv)
-        window = gui_configurator.Configurator()
+        window = Configurator()
         window.show()
         return app.exec()
     except ImportError:
@@ -87,15 +105,26 @@ def run_gui_configurator():
         sys.exit(1)
 
 
-def run_debug_mode():
+def run_debug_mode(config):
     """Run debug mode to inspect UI elements."""
-    logger = setup_logging(Config())  # Use default config for debug
-    logger.info("Starting debug mode")
+    print("🔍 Running debug mode to inspect UI elements...")
+    print(f"Looking for window matching: {config.window_title_regex}")
     
     try:
-        copilot_ui_debug.main()
+        # Use the debug module from our package
+        result = inspect_ui_elements(config.window_title_regex)
+        
+        if result:
+            print("\n✅ UI inspection completed successfully")
+            print(f"Found {result['analysis_summary']['text_inputs_found']} text input candidates")
+            print(f"Found {result['analysis_summary']['send_buttons_found']} send button candidates") 
+            print(f"Found {result['analysis_summary']['new_conversation_buttons_found']} new conversation candidates")
+        else:
+            print("❌ UI inspection failed - could not connect to window")
+            sys.exit(1)
+            
     except Exception as e:
-        logger.error(f"Debug mode failed: {e}")
+        print(f"❌ Debug mode failed: {e}")
         sys.exit(1)
 
 
@@ -138,7 +167,16 @@ Examples:
     if args.gui:
         sys.exit(run_gui_configurator())
     elif args.debug:
-        run_debug_mode()
+        # Load config for debug mode
+        try:
+            if Path(args.config).exists():
+                config = Config.load_from_file(args.config)
+            else:
+                config = Config()  # Use defaults
+            run_debug_mode(config)
+        except Exception as e:
+            print(f"❌ Could not load config for debug: {e}")
+            sys.exit(1)
     else:
         # Load configuration
         try:
