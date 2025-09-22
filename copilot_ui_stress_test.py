@@ -195,6 +195,7 @@ def try_element_candidates(window, candidates, element_type):
         return None, None
     
     print(f"🔍 Prøver {len(candidates)} {element_type} kandidater...")
+    total_attempts = len(candidates)
     
     for i, candidate in enumerate(candidates, 1):
         try:
@@ -203,52 +204,56 @@ def try_element_candidates(window, candidates, element_type):
             control_type = candidate.get('control_type', '')
             score = candidate.get('score', 0)
             
-            print(f"  {i}. Prøver kandidat (score: {score})")
+            print(f"  {i}. Kandidat (score: {score})")
             print(f"     auto_id: '{auto_id}', title: '{title}', type: '{control_type}'")
             
             element = None
+            method_used = ""
             
-            # Try different search strategies
+            # Try different search strategies with detailed logging
             if auto_id:
                 try:
                     element = window.child_window(auto_id=auto_id)
-                    if element.exists() and element.is_enabled():
-                        print(f"     ✅ Suksess med auto_id: '{auto_id}'")
+                    is_valid, validation_msg = enhanced_element_validation(element, element_type, auto_id)
+                    if is_valid:
+                        log_recovery_attempt(element_type, i, total_attempts, f"auto_id='{auto_id}'", "success", validation_msg)
                         return element, candidate
                     else:
-                        print(f"     ⚠️ auto_id funnet men ikke tilgjengelig")
+                        log_recovery_attempt(element_type, i, total_attempts, f"auto_id='{auto_id}'", "partial", validation_msg)
                 except ElementNotFoundError:
-                    print(f"     ⚠️ auto_id ikke funnet")
+                    log_recovery_attempt(element_type, i, total_attempts, f"auto_id='{auto_id}'", "failed", "Element ikke funnet")
             
             if title and not element:
                 try:
                     element = window.child_window(title=title)
-                    if element.exists() and element.is_enabled():
-                        print(f"     ✅ Suksess med title: '{title}'")
+                    is_valid, validation_msg = enhanced_element_validation(element, element_type, title)
+                    if is_valid:
+                        log_recovery_attempt(element_type, i, total_attempts, f"title='{title}'", "success", validation_msg)
                         return element, candidate
                     else:
-                        print(f"     ⚠️ title funnet men ikke tilgjengelig")
+                        log_recovery_attempt(element_type, i, total_attempts, f"title='{title}'", "partial", validation_msg)
                 except ElementNotFoundError:
-                    print(f"     ⚠️ title ikke funnet")
+                    log_recovery_attempt(element_type, i, total_attempts, f"title='{title}'", "failed", "Element ikke funnet")
             
             if control_type and not element:
                 try:
                     element = window.child_window(control_type=control_type)
-                    if element.exists() and element.is_enabled():
-                        print(f"     ✅ Suksess med control_type: '{control_type}'")
+                    is_valid, validation_msg = enhanced_element_validation(element, element_type, control_type)
+                    if is_valid:
+                        log_recovery_attempt(element_type, i, total_attempts, f"control_type='{control_type}'", "success", validation_msg)
                         return element, candidate
                     else:
-                        print(f"     ⚠️ control_type funnet men ikke tilgjengelig")
+                        log_recovery_attempt(element_type, i, total_attempts, f"control_type='{control_type}'", "partial", validation_msg)
                 except ElementNotFoundError:
-                    print(f"     ⚠️ control_type ikke funnet")
+                    log_recovery_attempt(element_type, i, total_attempts, f"control_type='{control_type}'", "failed", "Element ikke funnet")
             
-            print(f"     ❌ Kandidat {i} feilet")
+            print(f"     ❌ Kandidat {i} fullstendig feilet")
             
         except Exception as e:
-            print(f"     ❌ Uventet feil ved kandidat {i}: {type(e).__name__}: {e}")
+            log_recovery_attempt(element_type, i, total_attempts, "all_methods", "failed", f"Uventet feil: {type(e).__name__}: {e}")
             continue
     
-    print(f"❌ Alle {element_type} kandidater feilet")
+    print(f"❌ Alle {total_attempts} {element_type} kandidater feilet")
     return None, None
 
 def find_element_with_dynamic_fallback(window, element_type, known_patterns):
@@ -259,49 +264,96 @@ def find_element_with_dynamic_fallback(window, element_type, known_patterns):
     print(f"🔍 Søker etter {element_type} med dynamisk fallback...")
     
     # First try known working patterns (prioritized)
-    for pattern in known_patterns:
+    print(f"📋 Fase 1: Prøver {len(known_patterns)} kjente patterns...")
+    for i, pattern in enumerate(known_patterns, 1):
         try:
+            print(f"  {i}. Testing kjent pattern: '{pattern}'")
+            element = None
+            validation_msg = ""
+            
             if element_type == "text_input":
                 # Try both auto_id and control_type
-                element = None
                 try:
                     element = window.child_window(auto_id=pattern)
+                    is_valid, validation_msg = enhanced_element_validation(element, "text_input", pattern)
+                    if is_valid:
+                        print(f"     ✅ Suksess med auto_id pattern")
+                    else:
+                        print(f"     ⚠️ auto_id funnet men: {validation_msg}")
+                        element = None
                 except ElementNotFoundError:
+                    print(f"     ⚠️ auto_id pattern ikke funnet, prøver control_type...")
                     try:
                         element = window.child_window(control_type=pattern)
+                        is_valid, validation_msg = enhanced_element_validation(element, "text_input", pattern)
+                        if is_valid:
+                            print(f"     ✅ Suksess med control_type pattern")
+                        else:
+                            print(f"     ⚠️ control_type funnet men: {validation_msg}")
+                            element = None
                     except ElementNotFoundError:
+                        print(f"     ❌ control_type pattern ikke funnet")
                         continue
                         
             elif element_type == "send_button":
                 # Try auto_id, then title
-                element = None
                 try:
                     element = window.child_window(auto_id=pattern)
+                    is_valid, validation_msg = enhanced_element_validation(element, "button", pattern)
+                    if is_valid:
+                        print(f"     ✅ Suksess med auto_id pattern")
+                    else:
+                        print(f"     ⚠️ auto_id funnet men: {validation_msg}")
+                        element = None
                 except ElementNotFoundError:
+                    print(f"     ⚠️ auto_id pattern ikke funnet, prøver title...")
                     try:
                         element = window.child_window(title=pattern)
+                        is_valid, validation_msg = enhanced_element_validation(element, "button", pattern)
+                        if is_valid:
+                            print(f"     ✅ Suksess med title pattern")
+                        else:
+                            print(f"     ⚠️ title funnet men: {validation_msg}")
+                            element = None
                     except ElementNotFoundError:
+                        print(f"     ❌ title pattern ikke funnet")
                         continue
                         
             elif element_type == "new_conversation":
                 # Try title match for new conversation
                 try:
                     element = window.child_window(title=pattern, control_type="Button")
+                    is_valid, validation_msg = enhanced_element_validation(element, "button", pattern)
+                    if is_valid:
+                        print(f"     ✅ Suksess med Button+title pattern")
+                    else:
+                        print(f"     ⚠️ Button+title funnet men: {validation_msg}")
+                        element = None
                 except ElementNotFoundError:
+                    print(f"     ⚠️ Button+title ikke funnet, prøver bare title...")
                     try:
                         element = window.child_window(title=pattern)
+                        is_valid, validation_msg = enhanced_element_validation(element, "button", pattern)
+                        if is_valid:
+                            print(f"     ✅ Suksess med title pattern")
+                        else:
+                            print(f"     ⚠️ title funnet men: {validation_msg}")
+                            element = None
                     except ElementNotFoundError:
+                        print(f"     ❌ title pattern ikke funnet")
                         continue
             
-            if element and element.exists() and element.is_enabled():
+            if element:
                 print(f"✅ {element_type} funnet med kjent pattern: '{pattern}'")
+                print(f"   Validering: {validation_msg}")
                 return element, f"known_pattern: {pattern}"
         
         except Exception as e:
-            print(f"⚠️ Feil ved testing av kjent pattern '{pattern}': {e}")
+            print(f"⚠️ Feil ved testing av kjent pattern '{pattern}': {type(e).__name__}: {e}")
             continue
     
-    print(f"⚠️ Alle kjente patterns feilet for {element_type} - starter dynamisk fallback...")
+    print(f"⚠️ Alle {len(known_patterns)} kjente patterns feilet for {element_type}")
+    print(f"📋 Fase 2: Starter dynamisk fallback via debug script...")
     
     # Dynamic fallback via debug script
     debug_data = dump_control_tree_via_script()
@@ -318,6 +370,8 @@ def find_element_with_dynamic_fallback(window, element_type, known_patterns):
     elif element_type == "new_conversation":
         candidates = debug_data.get('new_conversation_candidates', [])
     
+    print(f"📊 Mottok {len(candidates)} dynamiske kandidater for {element_type}")
+    
     # Try candidates
     element, candidate_info = try_element_candidates(window, candidates, element_type)
     if element:
@@ -325,7 +379,7 @@ def find_element_with_dynamic_fallback(window, element_type, known_patterns):
         print(f"✅ {element_type} funnet med dynamisk oppdagelse")
         return element, method_used
     
-    print(f"❌ Dynamisk fallback feilet for {element_type}")
+    print(f"❌ Både kjente patterns og dynamisk fallback feilet for {element_type}")
     return None, None
 
 def validate_window(window):
@@ -360,6 +414,61 @@ def validate_window(window):
     except Exception as e:
         print(f"❌ Feil ved vindu-validering: {e}")
         return False
+
+def log_recovery_attempt(element_type, attempt_num, total_attempts, method, result, details=""):
+    """
+    Log detailed information about element recovery attempts.
+    """
+    status_emoji = "✅" if result == "success" else "⚠️" if result == "partial" else "❌"
+    print(f"    {status_emoji} Forsøk {attempt_num}/{total_attempts}: {method}")
+    if details:
+        print(f"        Detaljer: {details}")
+    if result == "success":
+        print(f"        Status: {element_type} funnet og tilgjengelig")
+    elif result == "partial":
+        print(f"        Status: {element_type} funnet men ikke tilgjengelig")
+    else:
+        print(f"        Status: {element_type} ikke funnet")
+
+def enhanced_element_validation(element, element_type, identifier):
+    """
+    Enhanced validation of UI elements with detailed logging.
+    Returns (is_valid, status_message)
+    """
+    try:
+        if not element.exists():
+            return False, f"{element_type} med identifier '{identifier}' eksisterer ikke"
+        
+        if not element.is_visible():
+            return False, f"{element_type} med identifier '{identifier}' er ikke synlig"
+        
+        if not element.is_enabled():
+            return False, f"{element_type} med identifier '{identifier}' er ikke aktivert"
+        
+        # Additional checks for specific element types
+        if element_type == "text_input":
+            try:
+                # Test if we can interact with text field
+                element.get_value()  # This will fail if it's not a text input
+                return True, f"Tekstfelt '{identifier}' validert og klar for input"
+            except:
+                return True, f"Element '{identifier}' tilgjengelig (type validering feilet)"
+        
+        elif element_type == "button":
+            try:
+                # Check if button is clickable
+                rect = element.rectangle()
+                if rect.width() > 0 and rect.height() > 0:
+                    return True, f"Knapp '{identifier}' validert og klikkbar"
+                else:
+                    return False, f"Knapp '{identifier}' har ugyldig dimensjoner"
+            except:
+                return True, f"Knapp '{identifier}' tilgjengelig (dimensjon validering feilet)"
+        
+        return True, f"Element '{identifier}' grunnleggende validert"
+        
+    except Exception as e:
+        return False, f"Valideringsfeil for '{identifier}': {type(e).__name__}: {e}"
 
 # =============================================================================
 # HOVEDFUNKSJON
