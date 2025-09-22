@@ -12,9 +12,8 @@ Krav:
 
 import time
 import random
-from pywinauto import Application
+from pywinauto import Application, timings
 from pywinauto.findwindows import ElementNotFoundError
-from pywinauto.findbestmatch import MatchError
 from pywinauto.findbestmatch import MatchError
 
 # =============================================================================
@@ -22,7 +21,11 @@ from pywinauto.findbestmatch import MatchError
 # =============================================================================
 
 NUMBER_OF_MESSAGES = 50
-WAIT_TIME_SECONDS = 3
+WAIT_TIME_SECONDS = 0.5  # Raskere meldingsflyt
+
+# Optimaliser pywinauto-timings
+timings.Timings.window_find_timeout = 5
+timings.after_clickinput_wait = 0
 
 SAMPLE_MESSAGES = [
     "Hello! How are you today? 😊",
@@ -59,7 +62,7 @@ SAMPLE_MESSAGES = [
 # VERIFISERTE UI-IDENTIFIKATORER
 # =============================================================================
 
-WINDOW_TITLE_REGEX = r"^Copilot.*"  # Matcher alle vinduer som starter med "Copilot"
+WINDOW_TITLE_REGEX = r"^Copilot.*"
 TEXT_BOX_AUTO_ID = "InputTextBox"
 SEND_BUTTON_AUTO_ID = "OldComposerMicButton"
 
@@ -92,9 +95,17 @@ def main():
                 # Finn tekstfelt
                 try:
                     text_box = window.child_window(auto_id=TEXT_BOX_AUTO_ID)
+                    if not text_box.exists():
+                        raise ElementNotFoundError()
                 except ElementNotFoundError:
-                    print("⚠️  Primær tekstfelt-identifikator feilet, prøver fallback...")
+                    print("⚠️  Primær tekstfelt feilet, prøver fallback...")
                     text_box = window.child_window(control_type=ALT_TEXT_BOX_CONTROL_TYPE)
+                    if not text_box.exists():
+                        print(f"❌ Tekstfelt ikke tilgjengelig for melding {i}")
+                        if i == 3:
+                            print("📋 Dumper kontrolltre for feilsøking:")
+                            window.print_control_identifiers()
+                        continue
 
                 text_box.click_input()
                 text_box.type_keys("^a{BACKSPACE}")
@@ -104,20 +115,20 @@ def main():
                 # Finn sendeknapp
                 try:
                     send_button = window.child_window(auto_id=SEND_BUTTON_AUTO_ID)
+                    if not send_button.exists():
+                        raise ElementNotFoundError()
                 except ElementNotFoundError:
                     print("⚠️  Primær sendeknapp feilet, prøver fallback...")
                     send_button = window.child_window(title=ALT_SEND_BUTTON_NAME)
+                    if not send_button.exists():
+                        print(f"❌ Sendeknapp ikke tilgjengelig for melding {i}")
+                        continue
 
                 send_button.click()
                 print("🚀 Sendeknapp klikket")
 
                 if i < NUMBER_OF_MESSAGES:
-                    print(f"⏳ Venter {WAIT_TIME_SECONDS} sekunder før neste melding...")
                     time.sleep(WAIT_TIME_SECONDS)
-
-            except ElementNotFoundError as e:
-                print(f"❌ UI-element ikke funnet for melding {i}: {e}")
-                continue
 
             except Exception as e:
                 print(f"❌ Uventet feil ved melding {i}: {e}")
