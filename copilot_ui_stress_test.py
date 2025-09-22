@@ -2,35 +2,27 @@
 """
 Microsoft Copilot UI Stress Test Script
 
-This script automates sending messages to the Microsoft Copilot for Windows app
-to stress-test its performance and stability through bilingual conversation simulation.
+Automatiserer sending av meldinger til Microsoft Copilot for Windows-appen
+for å teste ytelse og stabilitet gjennom en flerspråklig samtalesimulering.
 
-Prerequisites:
-- Install the required library: pip install pywinauto
-- Microsoft Copilot for Windows app must be running before executing this script
+Krav:
+- Installer pywinauto: pip install pywinauto
+- Sørg for at Microsoft Copilot er åpen før du kjører skriptet
 """
 
-# Import necessary libraries
 import time
 import random
 from pywinauto import Application
-from pywinauto.findbestmatch import MatchError
-from pywinauto.findwindows import ElementNotFoundError
+from pywinauto.findwindows import ElementNotFoundError, MatchError
 
 # =============================================================================
-# CONFIGURATION SECTION - USER EDITABLE PARAMETERS
+# KONFIGURASJON
 # =============================================================================
 
-# Number of messages to send during the stress test
 NUMBER_OF_MESSAGES = 50
-
-# Wait time in seconds between sending messages
 WAIT_TIME_SECONDS = 3
 
-# Bilingual sample messages including English and Norwegian with special characters (æ, ø, å)
-# and emojis/combined emojis
 SAMPLE_MESSAGES = [
-    # English messages with emojis
     "Hello! How are you today? 😊",
     "Can you help me with a coding problem? 🤔💻",
     "What's the weather like? ☀️🌤️⛅",
@@ -41,8 +33,6 @@ SAMPLE_MESSAGES = [
     "I love programming! 💖👨‍💻",
     "Have a great day! 🌟💫",
     "Testing the UI automation 🔧⚙️",
-    
-    # Norwegian messages with special characters (æ, ø, å) and emojis
     "Hei! Hvordan har du det i dag? 😊🇳🇴",
     "Kan du hjelpe meg med et kodeproblem? 🤔💻",
     "Hvordan er været? ☀️❄️",
@@ -58,133 +48,91 @@ SAMPLE_MESSAGES = [
     "Rødt, gult og grønt 🔴🟡🟢",
     "Ærlighet, øl og åpenhet 🍺💭",
     "Bjørn går på lørdagstur 🐻🚶‍♂️",
-    
-    # More complex messages mixing languages
     "Hello! Jeg snakker både engelsk og norsk 🌍🗣️",
     "Machine learning og kunstig intelligens 🤖🧠",
     "Python programming med æ, ø, å karakterer 🐍📝"
 ]
 
 # =============================================================================
-# UI ELEMENT IDENTIFIERS - PLACEHOLDER VALUES
+# VERIFISERTE UI-IDENTIFIKATORER
 # =============================================================================
-# ⚠️  IMPORTANT: THESE ARE PLACEHOLDER VALUES! ⚠️
-# 
-# You MUST find the correct identifiers for your specific system before running this script.
-# Use one of these methods to find the correct identifiers:
-# 
-# Method 1: Uncomment the window.print_control_identifiers() line in the main() function
-#           to print a tree of all available UI elements to the console.
-# 
-# Method 2: Use Microsoft's Inspect.exe tool (comes with Windows SDK)
-#           to inspect the Copilot application and find the correct element identifiers.
-# 
-# Method 3: Use pywinauto's inspection capabilities or other UI automation tools.
-# 
-# Replace these placeholder values with the actual identifiers from your system:
 
-# Main window identifier - try window title or process name
-COPILOT_WINDOW_TITLE = "Copilot"  # Placeholder: Replace with actual window title
+WINDOW_TITLE_REGEX = r"^Copilot.*"  # Matcher alle vinduer som starter med "Copilot"
+TEXT_BOX_AUTO_ID = "InputTextBox"
+SEND_BUTTON_AUTO_ID = "OldComposerMicButton"
 
-# Text input field identifier - could be AutomationId, control type, or name
-TEXT_BOX_AUTO_ID = "TextInput"  # Placeholder: Replace with actual text box identifier
+ALT_TEXT_BOX_CONTROL_TYPE = "Edit"
+ALT_SEND_BUTTON_NAME = "Snakk med Copilot"
 
-# Send button identifier - could be AutomationId, control type, or name  
-SEND_BUTTON_AUTO_ID = "SendButton"  # Placeholder: Replace with actual send button identifier
-
-# Alternative identifiers to try if the above don't work
-ALT_TEXT_BOX_CONTROL_TYPE = "Edit"  # Alternative: Control type for text input
-ALT_SEND_BUTTON_NAME = "Send"  # Alternative: Button name or visible text
-
+# =============================================================================
+# HOVEDFUNKSJON
+# =============================================================================
 
 def main():
-    """
-    Main function containing the core automation logic.
-    """
-    print("🚀 Starting Microsoft Copilot UI Stress Test")
-    print(f"📊 Configuration: {NUMBER_OF_MESSAGES} messages, {WAIT_TIME_SECONDS}s wait time")
+    print("🚀 Starter Microsoft Copilot UI Stress Test")
+    print(f"📊 Konfigurasjon: {NUMBER_OF_MESSAGES} meldinger, {WAIT_TIME_SECONDS}s mellomrom")
     print("="*60)
-    
+
     try:
-        # Attempt to connect to the Copilot application window
-        print("🔗 Connecting to Microsoft Copilot window...")
-        app = Application(backend="uia").connect(title=COPILOT_WINDOW_TITLE)
-        window = app.window(title=COPILOT_WINDOW_TITLE)
-        
-        print("✅ Successfully connected to Copilot window")
-        
-        # DEBUGGING HELPER: Uncomment the line below to print all available UI elements
-        # This will help you find the correct identifiers for your system
-        # window.print_control_identifiers()
-        
-        # Main automation loop
-        print(f"🔄 Starting message sending loop...")
-        
+        print("🔗 Kobler til Copilot-vindu (regex-match)...")
+        app = Application(backend="uia").connect(title_re=WINDOW_TITLE_REGEX)
+        window = app.window(title_re=WINDOW_TITLE_REGEX)
+        print("✅ Tilkobling til Copilot-vinduet vellykket")
+
+        print("🔄 Starter meldingssløyfe...")
+
         for i in range(1, NUMBER_OF_MESSAGES + 1):
             try:
-                print(f"📝 Sending message {i} of {NUMBER_OF_MESSAGES}")
-                
-                # Select a random message from our sample list
+                print(f"📝 Sender melding {i} av {NUMBER_OF_MESSAGES}")
                 message = random.choice(SAMPLE_MESSAGES)
-                print(f"💬 Selected message: {message[:50]}{'...' if len(message) > 50 else ''}")
-                
-                # Find the text input field
+                print(f"💬 Valgt melding: {message[:50]}{'...' if len(message) > 50 else ''}")
+
+                # Finn tekstfelt
                 try:
                     text_box = window.child_window(auto_id=TEXT_BOX_AUTO_ID)
                 except ElementNotFoundError:
-                    # Try alternative identifier if the first one fails
-                    print("⚠️  Primary text box identifier failed, trying alternative...")
+                    print("⚠️  Primær tekstfelt-identifikator feilet, prøver fallback...")
                     text_box = window.child_window(control_type=ALT_TEXT_BOX_CONTROL_TYPE)
-                
-                # Clear any existing text and type the new message
+
                 text_box.click_input()
-                text_box.type_keys("^a")  # Select all existing text
-                text_box.type_keys(message)
-                
-                print("✏️  Message typed into text box")
-                
-                # Find and click the send button
+                text_box.type_keys("^a{BACKSPACE}")
+                text_box.type_keys(message, with_spaces=True)
+                print("✏️  Melding skrevet inn")
+
+                # Finn sendeknapp
                 try:
                     send_button = window.child_window(auto_id=SEND_BUTTON_AUTO_ID)
                 except ElementNotFoundError:
-                    # Try alternative identifier if the first one fails
-                    print("⚠️  Primary send button identifier failed, trying alternative...")
-                    send_button = window.child_window(name=ALT_SEND_BUTTON_NAME)
-                
+                    print("⚠️  Primær sendeknapp feilet, prøver fallback...")
+                    send_button = window.child_window(title=ALT_SEND_BUTTON_NAME)
+
                 send_button.click()
-                print("🚀 Send button clicked")
-                
-                # Wait before sending the next message
-                if i < NUMBER_OF_MESSAGES:  # Don't wait after the last message
-                    print(f"⏳ Waiting {WAIT_TIME_SECONDS} seconds before next message...")
+                print("🚀 Sendeknapp klikket")
+
+                if i < NUMBER_OF_MESSAGES:
+                    print(f"⏳ Venter {WAIT_TIME_SECONDS} sekunder før neste melding...")
                     time.sleep(WAIT_TIME_SECONDS)
-                
+
             except ElementNotFoundError as e:
-                print(f"❌ Error finding UI element for message {i}: {e}")
-                print("💡 Tip: Check your UI element identifiers in the configuration section")
-                print("💡 Tip: Uncomment window.print_control_identifiers() to debug")
+                print(f"❌ UI-element ikke funnet for melding {i}: {e}")
                 continue
-                
+
             except Exception as e:
-                print(f"❌ Unexpected error for message {i}: {e}")
+                print(f"❌ Uventet feil ved melding {i}: {e}")
                 continue
-        
+
         print("="*60)
-        print("🎉 Stress test completed successfully!")
-        print(f"📊 Sent {NUMBER_OF_MESSAGES} messages to Microsoft Copilot")
-        
+        print("🎉 Stresstest fullført!")
+        print(f"📊 Totalt sendt: {NUMBER_OF_MESSAGES} meldinger")
+
     except MatchError:
-        print("❌ Error: Could not find Microsoft Copilot window")
-        print("💡 Make sure Microsoft Copilot is running and the window title is correct")
-        print(f"💡 Current window title setting: '{COPILOT_WINDOW_TITLE}'")
-        print("💡 You may need to update COPILOT_WINDOW_TITLE in the configuration section")
-        return
-        
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        print("💡 Check that Microsoft Copilot is running and accessible")
+        print("❌ Kunne ikke finne Copilot-vinduet via regex")
+        print(f"💡 Sjekk at Copilot kjører og at tittelen starter med 'Copilot'")
         return
 
+    except Exception as e:
+        print(f"❌ Uventet feil: {e}")
+        return
 
 if __name__ == "__main__":
     main()
