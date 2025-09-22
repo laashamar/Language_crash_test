@@ -117,6 +117,11 @@ def main():
                             window.print_control_identifiers()
                         continue
 
+                # Sjekk at tekstfeltet er aktivert
+                if not text_box.is_enabled():
+                    print(f"❌ Tekstfelt finnes men er deaktivert for melding {i}")
+                    continue
+
                 text_box.click_input()
                 text_box.type_keys("^a{BACKSPACE}")
                 text_box.type_keys(message, with_spaces=True)
@@ -135,7 +140,7 @@ def main():
                         continue
 
                 if send_button.is_enabled():
-                    send_button.click()
+                    send_button.click_input()
                     print("🚀 Sendeknapp klikket")
                 else:
                     print(f"❌ Sendeknapp finnes men er deaktivert for melding {i}")
@@ -155,11 +160,11 @@ def main():
     except MatchError:
         print("❌ Kunne ikke finne Copilot-vinduet via regex")
         print(f"💡 Sjekk at Copilot kjører og at tittelen starter med 'Copilot'")
-        return
+        exit(1)
 
     except Exception as e:
         print(f"❌ Uventet feil: {e}")
-        return
+        exit(1)
 
 if __name__ == "__main__":
     main()
