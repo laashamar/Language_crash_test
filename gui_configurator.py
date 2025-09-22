@@ -11,16 +11,40 @@ import logging
 from config import Config
 import copilot_ui_stress_test
 
-# --- HJELPEKLASSE FOR SANNTIDS LOGGING ---
-class StreamToSignal(QObject):
-    """En klasse som omdirigerer sys.stdout til et Qt-signal."""
+# --- FORBEDRET HJELPEKLASSE FOR SANNTIDS LOGGING (MED STRUPEFUNKSJON) ---
+class ThrottledStreamToSignal(QObject):
+    """
+    En klasse som omdirigerer sys.stdout til et Qt-signal,
+    men som bufrer og struper signalene for å unngå overbelastning av GUI-tråden.
+    """
     text_written = Signal(str)
 
+    def __init__(self, parent=None, delay_ms=200):
+        super().__init__(parent)
+        self.buffer = []
+        self.timer = QTimer(self)
+        self.timer.setInterval(delay_ms)
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self._emit_buffered_text)
+
     def write(self, text):
-        self.text_written.emit(str(text))
+        self.buffer.append(str(text))
+        if not self.timer.isActive():
+            self.timer.start()
+
+    def _emit_buffered_text(self):
+        if not self.buffer:
+            return
+        
+        # Slå sammen all bufret tekst og send som ett enkelt signal
+        message = "".join(self.buffer)
+        self.buffer.clear()
+        self.text_written.emit(message)
 
     def flush(self):
-        pass
+        # Sørger for at eventuell gjenværende tekst i bufferen blir sendt
+        self.timer.stop()
+        self._emit_buffered_text()
 
 # --- OPPDATERT ARBEIDERKLASSE ---
 class StressTestWorker(QObject):
@@ -36,7 +60,7 @@ class StressTestWorker(QObject):
 
     def run(self):
         """Hovedmetoden som kjører testen."""
-        stdout_redirector = StreamToSignal()
+        stdout_redirector = ThrottledStreamToSignal()
         stdout_redirector.text_written.connect(self.progress.emit)
         
         # Bruk en logger for å fange opp interne feil i testlogikken
@@ -55,6 +79,7 @@ class StressTestWorker(QObject):
             self.result = {'error': str(e), 'success': 0, 'total': self.config.number_of_messages}
             logger.exception("Unhandled exception in worker thread")
         finally:
+            stdout_redirector.flush()  # Sørg for at siste rest av loggen sendes
             self.finished.emit()
 
 
@@ -310,4 +335,3 @@ if __name__ == "__main__":
     window = Configurator()
     window.show()
     sys.exit(app.exec())
-
