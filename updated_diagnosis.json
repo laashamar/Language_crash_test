@@ -1,0 +1,215 @@
+{
+  "summary": {
+    "total_issues": 19,
+    "severity_breakdown": {
+      "medium": 7,
+      "low": 9,
+      "high": 3
+    },
+    "category_breakdown": {
+      "object_creation": 1,
+      "resource_loading": 1,
+      "memory_leaks": 1,
+      "process_events": 6,
+      "signal_slot": 2,
+      "event_loop": 1,
+      "excessive_logging": 3,
+      "platform_specific": 3,
+      "lambda_usage": 1
+    },
+    "files_with_issues": 4,
+    "pyside_version": "6.9.2"
+  },
+  "issues": [
+    {
+      "step": 7,
+      "severity": "medium",
+      "category": "object_creation",
+      "file_path": "gui_configurator.py",
+      "line_number": 73,
+      "code_snippet": "def setup_ui(...): # 35 widget creations",
+      "description": "Excessive object creation in setup_ui(): 35 widgets",
+      "recommendation": "Consider lazy loading or moving heavy object creation to background"
+    },
+    {
+      "step": 17,
+      "severity": "low",
+      "category": "resource_loading",
+      "file_path": "gui_configurator.py",
+      "line_number": 145,
+      "code_snippet": "self.output_area.setFont(QFont(\"Consolas\", 10))",
+      "description": "Resource loading in main thread: QFont loading",
+      "recommendation": "Consider lazy loading or background prefetching"
+    },
+    {
+      "step": 18,
+      "severity": "low",
+      "category": "memory_leaks",
+      "file_path": "gui_configurator.py",
+      "line_number": 0,
+      "code_snippet": "32 widgets, 0 setParent calls",
+      "description": "Potential memory leaks: widgets created without explicit parenting",
+      "recommendation": "Ensure widgets have proper parent assignment or explicit deletion"
+    },
+    {
+      "step": 20,
+      "severity": "medium",
+      "category": "process_events",
+      "file_path": "gui_configurator.py",
+      "line_number": 232,
+      "code_snippet": "# FJERNERT: QApplication.processEvents()",
+      "description": "QApplication.processEvents() usage detected",
+      "recommendation": "Avoid processEvents(); use proper signal-slot flow instead"
+    },
+    {
+      "step": 3,
+      "severity": "high",
+      "category": "signal_slot",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 260,
+      "code_snippet": "# Check for .connect(func()) instead of .connect(func)",
+      "description": "Signal connected to function call result instead of function reference",
+      "recommendation": "Remove parentheses: use .connect(func) instead of .connect(func())"
+    },
+    {
+      "step": 3,
+      "severity": "high",
+      "category": "signal_slot",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 271,
+      "code_snippet": "recommendation=\"Remove parentheses: use .connect(func) instead of .connect(func())\"",
+      "description": "Signal connected to function call result instead of function reference",
+      "recommendation": "Remove parentheses: use .connect(func) instead of .connect(func())"
+    },
+    {
+      "step": 10,
+      "severity": "medium",
+      "category": "event_loop",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 538,
+      "code_snippet": "'layout().update()', 'addWidget()', 'removeWidget()', 'resize()'",
+      "description": "Frequent update() calls",
+      "recommendation": "Ensure event loop can process events; use QTimer for periodic tasks"
+    },
+    {
+      "step": 16,
+      "severity": "low",
+      "category": "excessive_logging",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 0,
+      "code_snippet": "26 print() statements",
+      "description": "Excessive console output may slow GUI responsiveness",
+      "recommendation": "Throttle logging or redirect to file"
+    },
+    {
+      "step": 20,
+      "severity": "medium",
+      "category": "process_events",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 161,
+      "code_snippet": "# Step 20: Validate QApplication.processEvents usage",
+      "description": "QApplication.processEvents() usage detected",
+      "recommendation": "Avoid processEvents(); use proper signal-slot flow instead"
+    },
+    {
+      "step": 20,
+      "severity": "medium",
+      "category": "process_events",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 613,
+      "code_snippet": "\"\"\"Step 20: Validate use of QApplication.processEvents().\"\"\"",
+      "description": "QApplication.processEvents() usage detected",
+      "recommendation": "Avoid processEvents(); use proper signal-slot flow instead"
+    },
+    {
+      "step": 20,
+      "severity": "high",
+      "category": "process_events",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 615,
+      "code_snippet": "if 'processEvents' in line:",
+      "description": "QApplication.processEvents() usage detected",
+      "recommendation": "Avoid processEvents(); use proper signal-slot flow instead"
+    },
+    {
+      "step": 20,
+      "severity": "medium",
+      "category": "process_events",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 628,
+      "code_snippet": "description=\"QApplication.processEvents() usage detected\",",
+      "description": "QApplication.processEvents() usage detected",
+      "recommendation": "Avoid processEvents(); use proper signal-slot flow instead"
+    },
+    {
+      "step": 20,
+      "severity": "medium",
+      "category": "process_events",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 629,
+      "code_snippet": "recommendation=\"Avoid processEvents(); use proper signal-slot flow instead\"",
+      "description": "QApplication.processEvents() usage detected",
+      "recommendation": "Avoid processEvents(); use proper signal-slot flow instead"
+    },
+    {
+      "step": 21,
+      "severity": "low",
+      "category": "platform_specific",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 637,
+      "code_snippet": "(r'DPI.*scaling', 'DPI scaling issues'),",
+      "description": "Platform-specific code: DPI scaling issues",
+      "recommendation": "Test on target platforms and handle platform differences"
+    },
+    {
+      "step": 21,
+      "severity": "low",
+      "category": "platform_specific",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 638,
+      "code_snippet": "(r'X11.*thread', 'X11 threading issues'),",
+      "description": "Platform-specific code: X11 threading issues",
+      "recommendation": "Test on target platforms and handle platform differences"
+    },
+    {
+      "step": 21,
+      "severity": "low",
+      "category": "platform_specific",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 639,
+      "code_snippet": "(r'Wayland', 'Wayland compatibility concerns'),",
+      "description": "Platform-specific code: Wayland compatibility concerns",
+      "recommendation": "Test on target platforms and handle platform differences"
+    },
+    {
+      "step": 22,
+      "severity": "low",
+      "category": "lambda_usage",
+      "file_path": "gui_freeze_diagnosis.py",
+      "line_number": 660,
+      "code_snippet": "if 'connect(' in line and 'lambda' in line:",
+      "description": "Lambda function in signal connection",
+      "recommendation": "Use named slots or functools.partial for clarity and cleanup"
+    },
+    {
+      "step": 16,
+      "severity": "low",
+      "category": "excessive_logging",
+      "file_path": "copilot_ui_debug.py",
+      "line_number": 0,
+      "code_snippet": "50 print() statements",
+      "description": "Excessive console output may slow GUI responsiveness",
+      "recommendation": "Throttle logging or redirect to file"
+    },
+    {
+      "step": 16,
+      "severity": "low",
+      "category": "excessive_logging",
+      "file_path": "verify_install.py",
+      "line_number": 0,
+      "code_snippet": "57 print() statements",
+      "description": "Excessive console output may slow GUI responsiveness",
+      "recommendation": "Throttle logging or redirect to file"
+    }
+  ]
+}

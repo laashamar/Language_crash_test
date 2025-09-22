@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QPushButton, QTextEdit, QFileDialog, QMessageBox, QSplitter,
     QDoubleSpinBox, QTabWidget, QGroupBox
 )
-from PySide6.QtCore import Qt, QObject, QThread, Signal
+from PySide6.QtCore import Qt, QObject, QThread, Signal, QTimer
 from PySide6.QtGui import QTextCursor, QFont
 import sys
 import contextlib
@@ -27,6 +27,7 @@ class StressTestWorker(QObject):
     """Kjører stresstesten i en separat tråd med sanntids-output."""
     progress = Signal(str)
     finished = Signal()
+    error = Signal(str)  # New signal for error reporting
 
     def __init__(self, config):
         super().__init__()
@@ -48,8 +49,11 @@ class StressTestWorker(QObject):
                 # Kaller den refaktorerte funksjonen som returnerer et resultat
                 self.result = copilot_ui_stress_test.run_stress_test_logic(self.config, logger)
         except Exception as e:
-            self.progress.emit(f"❌ En kritisk feil oppstod i workeren: {e}\n")
+            error_msg = f"❌ En kritisk feil oppstod i workeren: {e}\n"
+            self.progress.emit(error_msg)
+            self.error.emit(str(e))  # Emit dedicated error signal
             self.result = {'error': str(e), 'success': 0, 'total': self.config.number_of_messages}
+            logger.exception("Unhandled exception in worker thread")
         finally:
             self.finished.emit()
 
@@ -64,6 +68,7 @@ class Configurator(QWidget):
         self.setMinimumSize(800, 600)
         self.thread = None
         self.worker = None
+        self.test_timeout_timer = None
         self.setup_ui()
         
     def setup_ui(self):
@@ -78,13 +83,13 @@ class Configurator(QWidget):
         config_group = QGroupBox("📊 Test Configuration")
         config_layout = QVBoxLayout(config_group)
         config_layout.addWidget(QLabel("✍️ Number of messages:"))
-        self.spin_count = QSpinBox()
+        self.spin_count = QSpinBox(self)
         self.spin_count.setRange(1, 1000)
         self.spin_count.setValue(self.config.number_of_messages)
         self.spin_count.valueChanged.connect(self.show_preview)
         config_layout.addWidget(self.spin_count)
         config_layout.addWidget(QLabel("⏱️ Wait time between messages (seconds):"))
-        self.spin_wait = QDoubleSpinBox()
+        self.spin_wait = QDoubleSpinBox(self)
         self.spin_wait.setRange(0.1, 10.0)
         self.spin_wait.setSingleStep(0.1)
         self.spin_wait.setValue(self.config.wait_time_seconds)
@@ -93,7 +98,7 @@ class Configurator(QWidget):
         
         preview_group = QGroupBox("🧪 Message Preview")
         preview_layout = QVBoxLayout(preview_group)
-        self.preview = QTextEdit()
+        self.preview = QTextEdit(self)
         self.preview.setReadOnly(True)
         self.preview.setMaximumHeight(150)
         preview_layout.addWidget(self.preview)
@@ -106,7 +111,7 @@ class Configurator(QWidget):
         window_group = QGroupBox("🪟 Window Detection")
         window_layout = QVBoxLayout(window_group)
         window_layout.addWidget(QLabel("Window title regex:"))
-        self.edit_window_regex = QTextEdit()
+        self.edit_window_regex = QTextEdit(self)
         self.edit_window_regex.setMaximumHeight(60)
         self.edit_window_regex.setPlainText(self.config.window_title_regex)
         window_layout.addWidget(self.edit_window_regex)
@@ -115,7 +120,7 @@ class Configurator(QWidget):
         debug_group = QGroupBox("⚙️ Debugging Settings")
         debug_layout = QVBoxLayout(debug_group)
         debug_layout.addWidget(QLabel("Debug script timeout (seconds):"))
-        self.spin_debug_timeout = QSpinBox()
+        self.spin_debug_timeout = QSpinBox(self)
         self.spin_debug_timeout.setRange(10, 120)
         self.spin_debug_timeout.setValue(self.config.debug_output_timeout)
         tooltip_text = """
@@ -136,7 +141,7 @@ class Configurator(QWidget):
         
         output_group = QGroupBox("📄 Runtime Output & Logs")
         output_layout = QVBoxLayout(output_group)
-        self.output_area = QTextEdit()
+        self.output_area = QTextEdit(self)
         self.output_area.setReadOnly(True)
         self.output_area.setFont(QFont("Consolas", 10))
         self.output_area.setPlainText("Ready to start stress testing...\n")
@@ -188,14 +193,40 @@ class Configurator(QWidget):
         self.worker = StressTestWorker(config)
         self.worker.moveToThread(self.thread)
         
+        # Add timeout protection for long-running tests
+        self.test_timeout_timer = QTimer()
+        self.test_timeout_timer.setSingleShot(True)
+        self.test_timeout_timer.timeout.connect(self.on_test_timeout)
+        
+        # Set timeout based on number of messages and wait time
+        estimated_time = (config.number_of_messages * config.wait_time_seconds + 60) * 1000  # Add 60s buffer
+        self.test_timeout_timer.start(int(min(estimated_time, 300000)))  # Max 5 minutes
+        
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.on_test_finished)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.finished.connect(self.test_timeout_timer.stop)  # Stop timeout timer
         self.thread.finished.connect(self.thread.deleteLater)
         self.worker.progress.connect(self.append_output)
+        self.worker.error.connect(self.on_worker_error)  # Connect error signal
         
         self.thread.start()
+
+    def on_test_timeout(self):
+        """Handle test timeout to prevent indefinite hanging."""
+        self.append_output("\n⏰ Test timeout reached. Forcibly stopping...\n")
+        if self.thread and self.thread.isRunning():
+            self.thread.requestInterruption()
+            if not self.thread.wait(5000):  # Wait 5 seconds for graceful shutdown
+                self.thread.terminate()  # Force terminate if necessary
+                self.thread.wait()
+        self.btn_start.setEnabled(True)
+        QMessageBox.warning(self, "Test Timeout", "Test was stopped due to timeout to prevent GUI freezing.")
+
+    def on_worker_error(self, error_message):
+        """Handle errors from worker thread."""
+        self.append_output(f"\n🚨 Worker thread error: {error_message}\n")
 
     def on_test_finished(self):
         result = self.worker.result if self.worker else {}
