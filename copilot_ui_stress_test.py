@@ -17,6 +17,7 @@ import sys
 import os
 import json
 import re
+import logging
 
 try:
     from pywinauto.application import Application
@@ -38,38 +39,69 @@ except ImportError:
             window_find_timeout = 5
             after_clickinput_wait = 0
 
-# =============================================================================
-# DYNAMISKE UI-IDENTIFIKATORER (NO HARDCODED VALUES)
-# =============================================================================
+# Global configuration (set by main.py or defaults)
+_config = None
 
-# Window detection uses dynamic regex pattern
-WINDOW_TITLE_REGEX = r"^Copilot.*"  # Matcher både "Copilot" og "Copilot – Ny samtale"
+def set_config(config):
+    """Set the global configuration for this module."""
+    global _config
+    _config = config
 
-# Known identifier patterns for prioritized fallback (NOW NORWEGIAN-FRIENDLY)
+def get_config():
+    """Get the current configuration, with fallback to defaults."""
+    global _config
+    if _config is None:
+        # Fallback to default values if no config is set
+        from config import Config
+        _config = Config()
+    return _config
+
+# Configuration-based access to eliminate hardcoded values
+def get_window_title_regex():
+    return get_config().window_title_regex
+
+def get_text_input_patterns():
+    return get_config().text_input_patterns
+
+def get_send_button_patterns():
+    return get_config().send_button_patterns
+
+def get_new_conversation_patterns():
+    return get_config().new_conversation_patterns
+
+def get_text_input_control_types():
+    return get_config().text_input_control_types
+
+def get_button_control_types():
+    return get_config().button_control_types
+
+def get_sample_messages():
+    return get_config().sample_messages
+
+def get_number_of_messages():
+    return get_config().number_of_messages
+
+def get_wait_time_seconds():
+    return get_config().wait_time_seconds
+
+# Legacy variables for backward compatibility (will be removed in final cleanup)
+WINDOW_TITLE_REGEX = r"^Copilot.*"
 KNOWN_TEXT_INPUT_PATTERNS = [
-    "InputTextBox",          # Most common technical ID
-    "CIB-Compose-Box",       # Another potential technical ID
-    "TextBox",
-    "MessageInput",
-    "ChatInput"
+    "InputTextBox", "CIB-Compose-Box", "TextBox", "MessageInput", "ChatInput"
 ]
-
 KNOWN_SEND_BUTTON_PATTERNS = [
-    "Snakk med Copilot",     # NORWEGIAN TITLE (Primary)
-    "OldComposerMicButton",  # Technical ID
-    "SendButton",
-    "MicButton"
+    "Snakk med Copilot", "OldComposerMicButton", "SendButton", "MicButton"
 ]
-
 KNOWN_NEW_CONVERSATION_PATTERNS = [
-    "Hjem",                  # NORWEGIAN TITLE (Primary, based on log)
-    "HomeButton",            # Technical ID
-    "Ny samtale",
-    "New conversation"
+    "Hjem", "HomeButton", "Ny samtale", "New conversation"
 ]
-# Control type fallbacks for dynamic discovery
 TEXT_INPUT_CONTROL_TYPES = ["Edit", "Text", "Document", "Custom"]
 BUTTON_CONTROL_TYPES = ["Button", "Custom", "MenuItem"]
+
+# Add the missing configuration variables that are referenced in the code
+NUMBER_OF_MESSAGES = 50
+WAIT_TIME_SECONDS = 0.5
+SAMPLE_MESSAGES = []  # Will be populated by get_sample_messages()
 
 # =============================================================================
 # HJELPEFUNKSJONER FOR DYNAMISK UI-ELEMENT OPPDAGELSE
@@ -145,14 +177,19 @@ def dump_control_tree_via_script():
 
 def try_element_candidates(window, candidates, element_type):
     """
-    Try to find and validate UI elements from prioritized candidate list.
+    Try to find and validate UI elements from prioritized candidate list using
+    efficient combined criteria searches instead of sequential checking.
+    
+    Uses pywinauto's filtering capabilities to optimize element lookup with
+    single calls containing multiple criteria.
+    
     Returns (element, candidate_info) if successful, (None, None) if all fail.
     """
     if not candidates:
         print(f"❌ Ingen {element_type} kandidater tilgjengelig")
         return None, None
     
-    print(f"🔍 Prøver {len(candidates)} {element_type} kandidater...")
+    print(f"🔍 Prøver {len(candidates)} {element_type} kandidater med optimalisert søk...")
     total_attempts = len(candidates)
     
     for i, candidate in enumerate(candidates, 1):
@@ -165,45 +202,64 @@ def try_element_candidates(window, candidates, element_type):
             print(f"  {i}. Kandidat (score: {score})")
             print(f"     auto_id: '{auto_id}', title: '{title}', type: '{control_type}'")
             
-            element = None
-            method_used = ""
+            # Build combined criteria for efficient single search
+            search_criteria = {}
+            criteria_description = []
             
-            # Try different search strategies with detailed logging
             if auto_id:
-                try:
-                    element = window.child_window(auto_id=auto_id)
-                    is_valid, validation_msg = enhanced_element_validation(element, element_type, auto_id)
-                    if is_valid:
-                        log_recovery_attempt(element_type, i, total_attempts, f"auto_id='{auto_id}'", "success", validation_msg)
-                        return element, candidate
-                    else:
-                        log_recovery_attempt(element_type, i, total_attempts, f"auto_id='{auto_id}'", "partial", validation_msg)
-                except ElementNotFoundError:
-                    log_recovery_attempt(element_type, i, total_attempts, f"auto_id='{auto_id}'", "failed", "Element ikke funnet")
+                search_criteria['auto_id'] = auto_id
+                criteria_description.append(f"auto_id='{auto_id}'")
             
-            if title and not element:
-                try:
-                    element = window.child_window(title=title)
-                    is_valid, validation_msg = enhanced_element_validation(element, element_type, title)
-                    if is_valid:
-                        log_recovery_attempt(element_type, i, total_attempts, f"title='{title}'", "success", validation_msg)
-                        return element, candidate
-                    else:
-                        log_recovery_attempt(element_type, i, total_attempts, f"title='{title}'", "partial", validation_msg)
-                except ElementNotFoundError:
-                    log_recovery_attempt(element_type, i, total_attempts, f"title='{title}'", "failed", "Element ikke funnet")
+            if title:
+                search_criteria['title'] = title
+                criteria_description.append(f"title='{title}'")
             
-            if control_type and not element:
+            if control_type:
+                search_criteria['control_type'] = control_type
+                criteria_description.append(f"control_type='{control_type}'")
+            
+            # If no criteria available, skip this candidate
+            if not search_criteria:
+                log_recovery_attempt(element_type, i, total_attempts, "no_criteria", "failed", "Ingen søkekriterier tilgjengelig")
+                continue
+            
+            # Try combined search with all available criteria first
+            if len(search_criteria) > 1:
                 try:
-                    element = window.child_window(control_type=control_type)
-                    is_valid, validation_msg = enhanced_element_validation(element, element_type, control_type)
+                    combined_desc = " + ".join(criteria_description)
+                    print(f"     🔍 Prøver kombinert søk: {combined_desc}")
+                    
+                    element = window.child_window(**search_criteria)
+                    is_valid, validation_msg = enhanced_element_validation(element, element_type, combined_desc)
+                    
                     if is_valid:
-                        log_recovery_attempt(element_type, i, total_attempts, f"control_type='{control_type}'", "success", validation_msg)
+                        log_recovery_attempt(element_type, i, total_attempts, f"combined({combined_desc})", "success", validation_msg)
                         return element, candidate
                     else:
-                        log_recovery_attempt(element_type, i, total_attempts, f"control_type='{control_type}'", "partial", validation_msg)
+                        log_recovery_attempt(element_type, i, total_attempts, f"combined({combined_desc})", "partial", validation_msg)
+                        
                 except ElementNotFoundError:
-                    log_recovery_attempt(element_type, i, total_attempts, f"control_type='{control_type}'", "failed", "Element ikke funnet")
+                    log_recovery_attempt(element_type, i, total_attempts, f"combined({combined_desc})", "failed", "Element ikke funnet")
+            
+            # Fallback to individual criteria if combined search failed
+            for criterion_key, criterion_value in search_criteria.items():
+                try:
+                    single_criteria = {criterion_key: criterion_value}
+                    criterion_desc = f"{criterion_key}='{criterion_value}'"
+                    print(f"     🔍 Fallback: {criterion_desc}")
+                    
+                    element = window.child_window(**single_criteria)
+                    is_valid, validation_msg = enhanced_element_validation(element, element_type, criterion_desc)
+                    
+                    if is_valid:
+                        log_recovery_attempt(element_type, i, total_attempts, f"fallback({criterion_desc})", "success", validation_msg)
+                        return element, candidate
+                    else:
+                        log_recovery_attempt(element_type, i, total_attempts, f"fallback({criterion_desc})", "partial", validation_msg)
+                        
+                except ElementNotFoundError:
+                    log_recovery_attempt(element_type, i, total_attempts, f"fallback({criterion_desc})", "failed", "Element ikke funnet")
+                    continue
             
             print(f"     ❌ Kandidat {i} fullstendig feilet")
             
@@ -433,15 +489,26 @@ def enhanced_element_validation(element, element_type, identifier):
 # =============================================================================
 
 def main():
+    """Main function for stress testing Microsoft Copilot UI."""
+    # Get configuration
+    config = get_config()
+    
+    # Setup logging
+    logger = logging.getLogger(__name__)
+    logger.info("🚀 Starter Microsoft Copilot UI Stress Test")
+    logger.info(f"📊 Konfigurasjon: {config.get_runtime_summary()}")
+    
     print("🚀 Starter Microsoft Copilot UI Stress Test")
-    print(f"📊 Konfigurasjon: {NUMBER_OF_MESSAGES} meldinger, {WAIT_TIME_SECONDS}s mellomrom")
+    print(f"📊 Konfigurasjon: {config.get_runtime_summary()}")
     print("="*60)
     
     # Check if we're on Windows with proper dependencies
     if not WINDOWS_AVAILABLE:
-        print("❌ pywinauto ikke tilgjengelig eller ikke på Windows")
+        error_msg = "❌ pywinauto ikke tilgjengelig eller ikke på Windows"
+        print(error_msg)
         print("💡 Installer med: pip install pywinauto")
         print("💡 Denne scriptet må kjøres på Windows")
+        logger.error(error_msg)
         sys.exit(1)
     
     # Track success/failure for exit code
@@ -449,11 +516,13 @@ def main():
 
     try:
         print("🔗 Kobler til Copilot-vindu (regex-match)...")
+        logger.info("Forsøker å koble til Copilot-vindu")
         
         # Window detection with explicit error handling
         try:
-            app = Application(backend="uia").connect(title_re=WINDOW_TITLE_REGEX)
-            window = app.window(title_re=WINDOW_TITLE_REGEX)
+            app = Application(backend="uia").connect(title_re=config.window_title_regex)
+            window = app.window(title_re=config.window_title_regex)
+            logger.info(f"✅ Koblet til Copilot-vindu med regex: {config.window_title_regex}")
         except MatchError as e:
             print("❌ Kunne ikke finne Copilot-vinduet via regex")
             print(f"💡 Sjekk at Copilot kjører og at tittelen starter med 'Copilot'")
@@ -477,32 +546,38 @@ def main():
         # Start new conversation using dynamic detection
         try:
             new_chat_element, method = find_element_with_dynamic_fallback(
-                window, "new_conversation", KNOWN_NEW_CONVERSATION_PATTERNS
+                window, "new_conversation", config.new_conversation_patterns
             )
             if new_chat_element:
                 new_chat_element.click_input()
                 print(f"🆕 Ny samtale startet (metode: {method})")
+                logger.info(f"Ny samtale startet med metode: {method}")
                 time.sleep(1)  # Gi UI tid til å oppdatere
             else:
                 print("ℹ️ Ny samtale-knapp ikke funnet med noen metode - fortsetter med eksisterende samtale")
+                logger.warning("Ny samtale-knapp ikke funnet")
         except (TypeError, AttributeError, RuntimeError) as e:
             print(f"⚠️ Feil ved ny samtale-knapp: {type(e).__name__}: {e}")
             print("ℹ️ Fortsetter med eksisterende samtale")
+            logger.warning(f"Feil ved ny samtale-knapp: {e}")
         except Exception as e:
             print(f"⚠️ Uventet feil ved ny samtale: {type(e).__name__}: {e}")
             print("ℹ️ Fortsetter med eksisterende samtale")
+            logger.warning(f"Uventet feil ved ny samtale: {e}")
 
         print("🔄 Starter meldingssløyfe...")
+        logger.info("Starter hovedløkke for sending av meldinger")
 
-        for i in range(1, NUMBER_OF_MESSAGES + 1):
+        for i in range(1, config.number_of_messages + 1):
             try:
-                print(f"📝 Sender melding {i} av {NUMBER_OF_MESSAGES}")
-                message = random.choice(SAMPLE_MESSAGES)
+                print(f"📝 Sender melding {i} av {config.number_of_messages}")
+                message = random.choice(config.sample_messages)
                 print(f"💬 Valgt melding: {message[:50]}{'...' if len(message) > 50 else ''}")
+                logger.info(f"Sender melding {i}/{config.number_of_messages}: {message[:100]}...")
 
                 # Find text input field using dynamic discovery
                 text_box, text_method = find_element_with_dynamic_fallback(
-                    window, "text_input", KNOWN_TEXT_INPUT_PATTERNS
+                    window, "text_input", config.text_input_patterns
                 )
                 
                 if not text_box:
@@ -526,11 +601,12 @@ def main():
 
                 # Find send button using dynamic discovery
                 send_button, send_method = find_element_with_dynamic_fallback(
-                    window, "send_button", KNOWN_SEND_BUTTON_PATTERNS
+                    window, "send_button", config.send_button_patterns
                 )
                 
                 if not send_button:
                     print(f"❌ Sendeknapp ikke tilgjengelig for melding {i} - alle metoder feilet")
+                    logger.warning(f"Sendeknapp ikke funnet for melding {i}")
                     continue
 
                 print(f"✅ Sendeknapp funnet (metode: {send_method})")
@@ -539,17 +615,20 @@ def main():
                 try:
                     send_button.click_input()
                     print("🚀 Sendeknapp klikket")
+                    logger.info(f"Melding {i} sendt vellykket")
                     success_count += 1
                 except (TypeError, AttributeError, RuntimeError) as e:
                     print(f"❌ Feil ved klikking av sendeknapp: {type(e).__name__}: {e}")
+                    logger.error(f"Feil ved klikking av sendeknapp for melding {i}: {e}")
                     continue
                 except Exception as e:
                     print(f"❌ Uventet feil ved sendeklikk: {type(e).__name__}: {e}")
+                    logger.error(f"Uventet feil ved sendeklikk for melding {i}: {e}")
                     continue
 
                 # Wait between messages (except for last message)
-                if i < NUMBER_OF_MESSAGES:
-                    time.sleep(WAIT_TIME_SECONDS)
+                if i < config.number_of_messages:
+                    time.sleep(config.wait_time_seconds)
 
             except ElementNotFoundError as e:
                 print(f"❌ Element ikke funnet ved melding {i}: {e}")
@@ -563,17 +642,24 @@ def main():
 
         print("="*60)
         print("🎉 Stresstest fullført!")
-        print(f"📊 Totalt sendt: {success_count} av {NUMBER_OF_MESSAGES} meldinger")
+        print(f"📊 Totalt sendt: {success_count} av {config.number_of_messages} meldinger")
+        logger.info(f"Stresstest fullført: {success_count}/{config.number_of_messages} meldinger sendt")
         
         # Exit with appropriate code
         if success_count == 0:
-            print("❌ Ingen meldinger ble sendt - avslutter med feilkode")
+            error_msg = "❌ Ingen meldinger ble sendt - avslutter med feilkode"
+            print(error_msg)
+            logger.error(error_msg)
             sys.exit(1)
-        elif success_count < NUMBER_OF_MESSAGES:
-            print(f"⚠️ {NUMBER_OF_MESSAGES - success_count} meldinger feilet - delvis suksess")
+        elif success_count < config.number_of_messages:
+            warning_msg = f"⚠️ {config.number_of_messages - success_count} meldinger feilet - delvis suksess"
+            print(warning_msg)
+            logger.warning(warning_msg)
             sys.exit(0)  # Still considered success if some messages sent
         else:
-            print("✅ Alle meldinger sendt vellykket")
+            success_msg = "✅ Alle meldinger sendt vellykket"
+            print(success_msg)
+            logger.info(success_msg)
             sys.exit(0)
 
     except MatchError as e:
