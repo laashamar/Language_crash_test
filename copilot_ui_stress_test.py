@@ -143,9 +143,10 @@ def dump_control_tree_via_script():
     try:
         script_path = os.path.join(os.path.dirname(__file__), "copilot_ui_debug.py")
         if os.path.exists(script_path):
+            config = get_config() # Hent konfigurasjonen
             print("📋 Kjører separat debug-script for kontrolltre (required fallback)...")
-            result = subprocess.run([sys.executable, script_path], 
-                                  capture_output=True, text=True, timeout=30)
+            result = subprocess.run([sys.executable, script_path],
+                                  capture_output=True, text=True, timeout=config.debug_output_timeout) # <-- BRUKER KONFIGURERT VERDI
             if result.returncode == 0:
                 print("✅ Debug-script kjørt vellykket")
                 # Parse structured data from output
