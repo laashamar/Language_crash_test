@@ -39,14 +39,13 @@ class StressTestWorker(QObject):
         stdout_redirector.text_written.connect(self.progress.emit)
         
         # Bruk en logger for å fange opp interne feil i testlogikken
-        # Vi sender ikke dette til GUI, men det er god praksis.
         logger = logging.getLogger("gui_worker")
         logger.addHandler(logging.NullHandler()) # Forhindrer "No handler found"
 
         try:
             # Omdiriger stdout for varigheten av denne metoden
             with contextlib.redirect_stdout(stdout_redirector):
-                # Kaller den nye, refaktorerte funksjonen som returnerer et resultat
+                # Kaller den refaktorerte funksjonen som returnerer et resultat
                 self.result = copilot_ui_stress_test.run_stress_test_logic(self.config, logger)
         except Exception as e:
             self.progress.emit(f"❌ En kritisk feil oppstod i workeren: {e}\n")
@@ -221,7 +220,9 @@ class Configurator(QWidget):
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
         self.output_area.ensureCursorVisible()
-        QApplication.processEvents()
+        # FJERNERT: QApplication.processEvents()
+        # Denne linjen ble fjernet for å forhindre at GUI-et fryser
+        # ved høyfrekvent signalering fra worker-tråden.
 
     def clear_output(self):
         self.output_area.clear()
@@ -278,3 +279,4 @@ if __name__ == "__main__":
     window = Configurator()
     window.show()
     sys.exit(app.exec())
+
