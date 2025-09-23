@@ -33,6 +33,7 @@ class Config:
     # Core stress test parameters
     number_of_messages: int = 50
     wait_time_seconds: float = 0.5
+    language_choice: str = "both"  # Valg for melding-språk: "english", "norwegian", "both"
     
     # UI element detection patterns (Norwegian-friendly)
     window_title_regex: str = r"^Copilot.*"
@@ -79,6 +80,7 @@ class Config:
         
         if self.send_button_patterns is None:
             self.send_button_patterns = [
+                "send inn melding",      # NORWEGIAN TITLE (User suggestion)
                 "Snakk med Copilot",     # NORWEGIAN TITLE (Primary)
                 "OldComposerMicButton",  # Technical ID
                 "SendButton",
@@ -105,11 +107,11 @@ class Config:
 
     def regenerate_sample_messages(self):
         """
-        Generate a new list of sample messages based on number_of_messages.
+        Generate a new list of sample messages based on number_of_messages and language choice.
         This ensures the message list is always in sync with the configuration.
         """
         if self.number_of_messages > 0:
-            self.sample_messages = generate_messages(self.number_of_messages)
+            self.sample_messages = generate_messages(self.number_of_messages, self.language_choice)
         else:
             self.sample_messages = []
     
@@ -183,6 +185,9 @@ class Config:
         if self.wait_time_seconds < 0:
             raise ValueError("wait_time_seconds must be non-negative")
         
+        if self.language_choice not in ["english", "norwegian", "both"]:
+            raise ValueError("language_choice must be 'english', 'norwegian', or 'both'")
+        
         if not self.window_title_regex:
             raise ValueError("window_title_regex cannot be empty")
         
@@ -202,6 +207,7 @@ class Config:
         return (
             f"Messages: {self.number_of_messages}, "
             f"Interval: {self.wait_time_seconds}s, "
+            f"Language: {self.language_choice}, "
             f"Sample messages: {len(self.sample_messages)}"
         )
 

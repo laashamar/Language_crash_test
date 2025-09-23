@@ -117,37 +117,49 @@ def complex_message(lang, tone):
     
     return f"{intro} {statement}, {closure} {emoji}{special}"
 
-def generate_single_message():
-    """Generate a single bilingual test message."""
+def generate_single_message(language_choice: str = "both"):
+    """
+    Generate a single test message based on the language choice.
+    
+    Args:
+        language_choice: 'english', 'norwegian', or 'both'
+    """
+    # Bestem språket for denne spesifikke meldingen
+    if language_choice == "english":
+        lang = "english"
+    elif language_choice == "norwegian":
+        lang = "norsk"
+    else:  # 'both'
+        lang = random.choice(["norsk", "english"])
+
     # 60% chance for simple message, 40% for complex
     if random.random() < 0.6:
-        lang = random.choice(["norsk", "english"])
         message = simple_message(lang)
         # Always add an emoji and special character for consistency
         emoji = random.choice(EMOJIS)
         special = random.choice(SPECIALS)
         return f"{message} {emoji}{special}"
     else:
-        lang = random.choice(["norsk", "english"])
         tone = random.choice(PERSONALITIES)
         return complex_message(lang, tone)
 
-def generate_messages(count):
+def generate_messages(count: int, language_choice: str = "both") -> list[str]:
     """
-    Generate a list of bilingual test messages.
+    Generate a list of test messages based on the specified language choice.
     
     Args:
         count: Number of messages to generate
+        language_choice: The desired language ('english', 'norwegian', 'both')
         
     Returns:
-        List of generated messages mixing Norwegian and English
+        List of generated messages
     """
     if count <= 0:
         return []
     
     messages = []
     for _ in range(count):
-        message = generate_single_message()
+        message = generate_single_message(language_choice)
         messages.append(message)
     
     return messages
@@ -203,7 +215,7 @@ if __name__ == "__main__":
     
     # Generate test messages
     test_count = 10
-    messages = generate_messages(test_count)
+    messages = generate_messages(test_count, "both")
     
     print(f"Generated {len(messages)} messages:")
     print("-" * 30)
@@ -238,3 +250,4 @@ if __name__ == "__main__":
         print("\n🎉 All requirements met!")
     else:
         print("\n⚠️ Some requirements not met - try generating more messages")
+

@@ -6,10 +6,10 @@ Main entry point for the Microsoft Copilot UI stress testing application.
 Provides options to run the stress test, configure settings via GUI, or run debug mode.
 
 Usage:
-    python main.py                 # Run stress test with default/config settings
-    python main.py --gui           # Open GUI configurator
+    python main.py                 # Launch the GUI configurator (default action)
+    python main.py --cli           # Run stress test from command line
     python main.py --debug         # Run debug mode to inspect UI elements
-    python main.py --config FILE   # Use specific config file
+    python main.py --config FILE   # Use specific config file for CLI/debug modes
 """
 
 import sys
@@ -135,17 +135,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                    # Run stress test with default settings
-  python main.py --gui              # Open GUI configurator  
+  python main.py                    # Launch the GUI configurator (default action)
+  python main.py --cli              # Run stress test from command line
   python main.py --debug            # Inspect UI elements
-  python main.py --config my.json   # Use custom config file
+  python main.py --cli --config my.json   # Use custom config file for CLI run
         """
     )
     
     parser.add_argument(
-        "--gui", 
+        "--cli", 
         action="store_true", 
-        help="Launch GUI configurator"
+        help="Run stress test directly from the command line using config file"
     )
     
     parser.add_argument(
@@ -158,27 +158,14 @@ Examples:
         "--config", 
         type=str, 
         default="config.json",
-        help="Path to configuration file (default: config.json)"
+        help="Path to configuration file for --cli or --debug modes (default: config.json)"
     )
     
     args = parser.parse_args()
     
-    # Handle different modes
-    if args.gui:
-        sys.exit(run_gui_configurator())
-    elif args.debug:
-        # Load config for debug mode
-        try:
-            if Path(args.config).exists():
-                config = Config.load_from_file(args.config)
-            else:
-                config = Config()  # Use defaults
-            run_debug_mode(config)
-        except Exception as e:
-            print(f"❌ Could not load config for debug: {e}")
-            sys.exit(1)
-    else:
-        # Load configuration
+    # Handle different modes based on arguments
+    if args.cli:
+        # Load configuration for CLI mode
         try:
             config = Config.load_from_file(args.config)
         except FileNotFoundError:
@@ -193,6 +180,23 @@ Examples:
         
         run_stress_test(config)
 
+    elif args.debug:
+        # Load config for debug mode
+        try:
+            if Path(args.config).exists():
+                config = Config.load_from_file(args.config)
+            else:
+                config = Config()  # Use defaults
+            run_debug_mode(config)
+        except Exception as e:
+            print(f"❌ Could not load config for debug: {e}")
+            sys.exit(1)
+            
+    else:
+        # Default action if no other flags are given: launch the GUI
+        sys.exit(run_gui_configurator())
+
 
 if __name__ == "__main__":
     main()
+

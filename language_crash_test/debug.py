@@ -90,23 +90,17 @@ def is_likely_send_button(element_info: Dict) -> bool:
     if not any(bt in control_type for bt in button_types):
         return False
     
-    # Norwegian and English send button patterns
+    # Norwegian and English send button patterns, now more robust
     send_patterns = [
         'send', 'submit', 'post', 'snakk', 'mic', 'microphone',
-        'composer', 'oldcomposer', 'copilot'
+        'composer', 'oldcomposer', 'copilot', 'arrow', 'icon'
     ]
     
-    # Check auto_id
-    if any(pattern in auto_id for pattern in send_patterns):
-        return True
-    
-    # Check title (Norwegian-friendly)
-    if any(pattern in title for pattern in send_patterns):
-        return True
-    
-    # Specific Norwegian patterns
-    norwegian_patterns = ['snakk med copilot', 'send', 'mic']
-    if any(pattern in title for pattern in norwegian_patterns):
+    # Combine auto_id and title for a broader search
+    combined_text = f"{auto_id} {title}".lower()
+
+    # Check combined text against all patterns
+    if any(pattern in combined_text for pattern in send_patterns):
         return True
     
     return False

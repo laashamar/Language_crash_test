@@ -24,7 +24,7 @@ try:
     from PySide6.QtWidgets import (
         QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
         QSpinBox, QPushButton, QTextEdit, QFileDialog, QMessageBox, QSplitter,
-        QDoubleSpinBox, QTabWidget, QGroupBox
+        QDoubleSpinBox, QTabWidget, QGroupBox, QComboBox
     )
     from PySide6.QtCore import Qt, QThread, QTimer
     from PySide6.QtGui import QTextCursor, QFont
@@ -115,6 +115,15 @@ class Configurator(QWidget):
         self.spin_wait.setSingleStep(0.1)
         self.spin_wait.setValue(self.config.wait_time_seconds)
         config_layout.addWidget(self.spin_wait)
+        
+        # Språkvalg
+        config_layout.addWidget(QLabel("Språk for meldinger:"))
+        self.combo_language = QComboBox(self)
+        self.combo_language.addItem("Norsk og Engelsk (Blandet)", "both")
+        self.combo_language.addItem("Kun Norsk", "norwegian")
+        self.combo_language.addItem("Kun Engelsk", "english")
+        self.combo_language.currentIndexChanged.connect(self.show_preview)
+        config_layout.addWidget(self.combo_language)
         
         basic_layout.addWidget(config_group)
         
@@ -214,15 +223,22 @@ class Configurator(QWidget):
         config = Config()
         config.number_of_messages = self.spin_count.value()
         config.wait_time_seconds = self.spin_wait.value()
+        config.language_choice = self.combo_language.currentData()
         config.window_title_regex = self.edit_window_regex.toPlainText().strip()
         config.debug_output_timeout = self.spin_debug_timeout.value()
-        config.regenerate_sample_messages()
+        config.regenerate_sample_messages()  # Vil nå bruke riktig språk
         return config
 
     def load_config_to_ui(self, config: Config):
         """Load configuration into UI components."""
         self.spin_count.setValue(config.number_of_messages)
         self.spin_wait.setValue(config.wait_time_seconds)
+        
+        # Finn indeksen som korresponderer til språkvalget og sett den
+        index = self.combo_language.findData(config.language_choice)
+        if index != -1:
+            self.combo_language.setCurrentIndex(index)
+        
         self.edit_window_regex.setPlainText(config.window_title_regex)
         self.spin_debug_timeout.setValue(config.debug_output_timeout)
         self.show_preview()
@@ -456,3 +472,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
