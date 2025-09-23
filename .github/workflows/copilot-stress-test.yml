@@ -2,9 +2,9 @@ name: Copilot UI Stress Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ '**' ] # Endret fra [ main, develop ] til å gjelde alle branches
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ] # Lagt til 'develop' for pull requests
   workflow_dispatch:
     inputs:
       number_of_messages:
