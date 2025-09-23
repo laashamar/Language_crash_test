@@ -38,6 +38,7 @@ class TestConfig(unittest.TestCase):
         # Test default values
         self.assertEqual(config.number_of_messages, 50)
         self.assertEqual(config.wait_time_seconds, 0.5)
+        self.assertEqual(config.language_choice, "both")
         self.assertEqual(config.window_title_regex, r"^Copilot.*")
         
         # Test that patterns are populated
@@ -57,6 +58,7 @@ class TestConfig(unittest.TestCase):
         
         self.assertIsInstance(config_dict, dict)
         self.assertEqual(config_dict['number_of_messages'], 50)
+        self.assertEqual(config_dict['language_choice'], 'both')
         self.assertEqual(config_dict['wait_time_seconds'], 0.5)
     
     def test_config_deserialization(self):
@@ -64,12 +66,14 @@ class TestConfig(unittest.TestCase):
         test_data = {
             'number_of_messages': 100,
             'wait_time_seconds': 1.0,
+            'language_choice': 'norwegian',
             'window_title_regex': r'^Test.*'
         }
         
         config = Config.from_dict(test_data)
         self.assertEqual(config.number_of_messages, 100)
         self.assertEqual(config.wait_time_seconds, 1.0)
+        self.assertEqual(config.language_choice, 'norwegian')
         self.assertEqual(config.window_title_regex, r'^Test.*')
     
     def test_config_file_save_load(self):
@@ -78,6 +82,7 @@ class TestConfig(unittest.TestCase):
         config = Config()
         config.number_of_messages = 25
         config.wait_time_seconds = 0.8
+        config.language_choice = "english"
         
         # Save to file
         config.save_to_file(self.test_config_file)
@@ -87,6 +92,7 @@ class TestConfig(unittest.TestCase):
         loaded_config = Config.load_from_file(self.test_config_file)
         self.assertEqual(loaded_config.number_of_messages, 25)
         self.assertEqual(loaded_config.wait_time_seconds, 0.8)
+        self.assertEqual(loaded_config.language_choice, "english")
     
     def test_config_validation(self):
         """Test config validation."""
@@ -109,6 +115,12 @@ class TestConfig(unittest.TestCase):
         # Reset and test empty regex
         config.wait_time_seconds = 0.5
         config.window_title_regex = ""
+        with self.assertRaises(ValueError):
+            config.validate()
+
+        # Reset and test invalid language choice
+        config.window_title_regex = r"^Copilot.*"
+        config.language_choice = "french"
         with self.assertRaises(ValueError):
             config.validate()
     
@@ -134,6 +146,7 @@ class TestConfig(unittest.TestCase):
         self.assertIsInstance(summary, str)
         self.assertIn("Messages:", summary)
         self.assertIn("Interval:", summary)
+        self.assertIn("Language:", summary)
         self.assertIn("Sample messages:", summary)
 
 

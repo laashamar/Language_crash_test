@@ -10,7 +10,7 @@ import sys
 import os
 
 # Import from the new package structure
-from language_crash_test.generator import generate_single_message, generate_messages
+from language_crash_test.generator import generate_single_message, generate_messages, validate_message_content
 
 
 class TestGenerator(unittest.TestCase):
@@ -51,30 +51,34 @@ class TestGenerator(unittest.TestCase):
         self.assertGreater(len(unique_messages), 1, "Messages should be diverse")
     
     def test_bilingual_content(self):
-        """Test that messages contain both Norwegian and English content."""
-        messages = generate_messages(50)  # Generate enough for statistical significance
+        """Test that messages contain both Norwegian and English content with 'both' choice."""
+        messages = generate_messages(50, language_choice="both")
+        validation = validate_message_content(messages)
         
-        norwegian_indicators = ["språklige", "agentens", "feilhåndtering", "oversettelser", "deterministiske"]
-        english_indicators = ["linguistic", "agent's", "error", "translation", "deterministic"]
+        self.assertGreater(validation['norwegian_messages'], 0, "Should generate Norwegian messages with 'both'")
+        self.assertGreater(validation['english_messages'], 0, "Should generate English messages with 'both'")
+
+    def test_norwegian_only_content(self):
+        """Test that only Norwegian messages are generated with 'norwegian' choice."""
+        messages = generate_messages(50, language_choice="norwegian")
+        validation = validate_message_content(messages)
         
-        has_norwegian = any(
-            any(indicator in message for indicator in norwegian_indicators)
-            for message in messages
-        )
+        self.assertGreater(validation['norwegian_messages'], 0)
+        self.assertEqual(validation['english_messages'], 0, "Should not generate English messages with 'norwegian'")
+
+    def test_english_only_content(self):
+        """Test that only English messages are generated with 'english' choice."""
+        messages = generate_messages(50, language_choice="english")
+        validation = validate_message_content(messages)
         
-        has_english = any(
-            any(indicator in message for indicator in english_indicators)
-            for message in messages
-        )
-        
-        self.assertTrue(has_norwegian, "Should generate Norwegian messages")
-        self.assertTrue(has_english, "Should generate English messages")
+        self.assertEqual(validation['norwegian_messages'], 0, "Should not generate Norwegian messages with 'english'")
+        self.assertGreater(validation['english_messages'], 0)
     
     def test_special_characters_norwegian(self):
         """Test that Norwegian messages contain special characters æ, ø, å."""
-        messages = generate_messages(100)  # Generate enough for statistical significance
+        messages = generate_messages(100, language_choice="norwegian")
         
-        norwegian_chars = ['æ', 'ø', 'å']
+        norwegian_chars = {'æ', 'ø', 'å'}
         found_chars = set()
         
         for message in messages:

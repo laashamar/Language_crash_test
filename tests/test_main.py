@@ -49,9 +49,10 @@ class TestMainIntegration(unittest.TestCase):
         
         self.assertEqual(result.returncode, 0)
         self.assertIn("Language Crash Test", result.stdout)
-        self.assertIn("--gui", result.stdout)
+        self.assertIn("--cli", result.stdout)
         self.assertIn("--debug", result.stdout)
         self.assertIn("--config", result.stdout)
+        self.assertIn("Launch the GUI configurator (default action)", result.stdout)
     
     def test_config_loading(self):
         """Test that config can be loaded correctly."""
@@ -88,21 +89,26 @@ class TestArgumentParsing(unittest.TestCase):
             formatter_class=argparse.RawDescriptionHelpFormatter
         )
         
-        parser.add_argument("--gui", action="store_true", help="Launch GUI configurator")
+        parser.add_argument("--cli", action="store_true", help="Run stress test directly")
         parser.add_argument("--debug", action="store_true", help="Run in debug mode")
         parser.add_argument("--config", type=str, default="config.json", help="Path to configuration file")
         
         # Test parsing different argument combinations
-        args = parser.parse_args(["--gui"])
-        self.assertTrue(args.gui)
+        args = parser.parse_args(["--cli"])
+        self.assertTrue(args.cli)
         self.assertFalse(args.debug)
         
         args = parser.parse_args(["--debug"])
-        self.assertFalse(args.gui)
+        self.assertFalse(args.cli)
         self.assertTrue(args.debug)
         
         args = parser.parse_args(["--config", "test.json"])
         self.assertEqual(args.config, "test.json")
+        
+        # Test default behavior (no arguments)
+        args = parser.parse_args([])
+        self.assertFalse(args.cli)
+        self.assertFalse(args.debug)
 
 
 if __name__ == '__main__':

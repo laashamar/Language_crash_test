@@ -353,15 +353,18 @@ def run_stress_test_logic(config, logger) -> Dict[str, Any]:
                 text_box.type_keys("^a{BACKSPACE}", with_spaces=True)
                 text_box.type_keys(message, with_spaces=True)
 
-                # Find and click send button
+                # Find send button
                 send_button, method = find_element_with_dynamic_fallback(
                     window, "send_button", config.send_button_patterns, config, logger
                 )
                 if not send_button:
                     logger.error(f"❌ Send button not found for message {i}")
                     continue
-
+                
+                # CRITICAL: Wait for the button to be enabled before clicking
+                send_button.wait('enabled', timeout=5)
                 send_button.click_input()
+                
                 logger.info(f"🚀 Message {i} sent successfully")
                 success_count += 1
 
@@ -384,4 +387,3 @@ def run_stress_test_logic(config, logger) -> Dict[str, Any]:
         error_msg = f"❌ An unexpected critical error occurred: {type(e).__name__}: {e}"
         logger.critical(error_msg)
         return {'success': 0, 'total': config.number_of_messages, 'error': error_msg}
-
