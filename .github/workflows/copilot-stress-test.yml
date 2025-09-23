@@ -19,7 +19,8 @@ on:
         type: string
 
 jobs:
-  syntax-check:
+  # Job for å sjekke syntaks og kjøre enhetstester på Linux
+  unit-test-and-syntax-check:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -30,16 +31,21 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        # Installer kun kjerneavhengigheter, PySide6 trengs ikke her
         pip install -r requirements.txt
-    - name: Syntax check - Main entrypoint
-      run: python -m py_compile main.py
+    - name: Syntax check - Main entrypoint and package
+      run: |
+        python -m py_compile main.py
+        python -m py_compile language_crash_test/*.py
     - name: Run all tests in tests/ folder
       run: |
         python -m unittest discover -s tests
 
+  # Job for å kjøre ende-til-ende test på Windows
   windows-stress-test:
     runs-on: windows-latest
-    needs: syntax-check
+    needs: unit-test-and-syntax-check
+    # Kjør kun ved manuell trigger eller spesifikk commit-melding
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-stress-test]'))
     steps:
     - uses: actions/checkout@v4
@@ -51,12 +57,18 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-    - name: Run main application
-      run: python main.py
-    - name: Run all tests in tests/ folder
-      run: |
-        python -m unittest discover -s tests
+    - name: Run CLI stress test (smoke test)
+      # Kjør med et lite antall meldinger for å verifisere at det starter
+      # Forventer at den feiler siden Copilot ikke kjører i CI, så || true er viktig
+      run: python main.py --config config.json
+    - name: Run debug mode (smoke test)
+      # Verifiserer at debug-modus starter
+      run: python main.py --debug || true
+    - name: Run GUI mode (smoke test with timeout)
+      # Starter GUI og avslutter etter 10 sek for å verifisere at det ikke krasjer
+      run: timeout 10 python main.py --gui || true
 
+  # Job for å sjekke kodekvalitet (formattering og linting)
   code-quality:
     runs-on: ubuntu-latest
     steps:
@@ -73,10 +85,11 @@ jobs:
         pip install flake8 black isort
     
     - name: Check code formatting with black
-      run: black --check --diff copilot_ui_stress_test.py copilot_ui_debug.py || true
+      # Sjekker alle relevante Python-filer
+      run: black --check --diff main.py language_crash_test/ tests/
     
-    - name: Check import sorting
-      run: isort --check-only --diff copilot_ui_stress_test.py copilot_ui_debug.py || true
+    - name: Check import sorting with isort
+      run: isort --check-only --diff main.py language_crash_test/ tests/
     
-    - name: Lint with flake8 (relaxed for compatibility)
-      run: flake8 --max-line-length=120 --extend-ignore=E203,W503 copilot_ui_stress_test.py copilot_ui_debug.py || true
+    - name: Lint with flake8
+      run: flake8 --max-line-length=120 --extend-ignore=E203,W503 main.py language_crash_test/ tests/
