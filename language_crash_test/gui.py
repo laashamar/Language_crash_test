@@ -50,57 +50,58 @@ from .worker import StressTestWorker
 
 class Configurator(QWidget):
     """
-    Main GUI configurator window with thread-safe test execution.
+    Hovedvindu for GUI-konfigurasjon med trådsikker testkjøring.
     
-    Implements the complete GUI requirements including:
-    - Responsive interface with worker threading
-    - Configuration management
-    - Real-time progress display
-    - Timeout protection
-    - Graceful error handling
+    Implementerer alle GUI-krav, inkludert:
+    - Responsivt grensesnitt med worker-tråder
+    - Konfigurasjonshåndtering
+    - Sanntidsvisning av fremdrift
+    - Tidsavbruddsbeskyttelse
+    - Robust feilhåndtering
     """
 
     def __init__(self, parent=None):
-        """Initialize the GUI configurator."""
+        """Initialiserer GUI-konfiguratoren."""
         super().__init__(parent)
         
-        # Initialize configuration
+        # Initialiserer konfigurasjonen
         self.config = Config()
+        self.logger = logging.getLogger(__name__) # Logger for GUI-hendelser
         
-        # Thread management
+        # Trådhåndtering
         self.thread = None
         self.worker = None
         self.test_timeout_timer = None
         
-        # UI setup
+        # UI-oppsett
         self.setWindowTitle(self.config.gui_window_title)
         self.setMinimumSize(self.config.gui_min_width, self.config.gui_min_height)
         
-        # Setup the user interface
+        # Setter opp brukergrensesnittet
         self.setup_ui()
         
-        # Load preview
+        # Laster forhåndsvisning
         self.show_preview()
 
     def setup_ui(self):
-        """Set up the user interface components."""
+        """Setter opp brukergrensesnittkomponentene."""
         main_layout = QVBoxLayout(self)
         
-        # Create splitter for resizable layout
+        # Oppretter en splitter for et justerbart layout
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
         
-        # Configuration panel (left side)
+        # Konfigurasjonspanel (venstre side)
         config_widget = QTabWidget(self)
         
-        # Basic configuration tab
+        # Fane for grunnleggende konfigurasjon
         basic_tab = QWidget()
         basic_layout = QVBoxLayout(basic_tab)
         
-        # Basic configuration group
+        # Gruppe for testkonfigurasjon
         config_group = QGroupBox("⚙️ Test Configuration")
         config_layout = QVBoxLayout(config_group)
         
-        # Number of messages
+        # Antall meldinger
         config_layout.addWidget(QLabel("Number of messages to send:"))
         self.spin_count = QSpinBox(self)
         self.spin_count.setRange(1, 1000)
@@ -108,7 +109,7 @@ class Configurator(QWidget):
         self.spin_count.valueChanged.connect(self.show_preview)
         config_layout.addWidget(self.spin_count)
         
-        # Wait time between messages
+        # Ventetid mellom meldinger
         config_layout.addWidget(QLabel("Wait time between messages (seconds):"))
         self.spin_wait = QDoubleSpinBox(self)
         self.spin_wait.setRange(0.1, 10.0)
@@ -127,7 +128,7 @@ class Configurator(QWidget):
         
         basic_layout.addWidget(config_group)
         
-        # Message preview group
+        # Gruppe for forhåndsvisning av meldinger
         preview_group = QGroupBox("🧪 Message Preview")
         preview_layout = QVBoxLayout(preview_group)
         self.preview = QTextEdit(self)
@@ -139,11 +140,11 @@ class Configurator(QWidget):
         basic_layout.addStretch()
         config_widget.addTab(basic_tab, "Basic Config")
         
-        # Advanced configuration tab
+        # Fane for avansert konfigurasjon
         advanced_tab = QWidget()
         advanced_layout = QVBoxLayout(advanced_tab)
         
-        # Window detection group
+        # Gruppe for vindusgjenkjenning
         window_group = QGroupBox("🪟 Window Detection")
         window_layout = QVBoxLayout(window_group)
         window_layout.addWidget(QLabel("Window title regex:"))
@@ -153,7 +154,7 @@ class Configurator(QWidget):
         window_layout.addWidget(self.edit_window_regex)
         advanced_layout.addWidget(window_group)
         
-        # Debug configuration group
+        # Gruppe for feilsøkingsinnstillinger
         debug_group = QGroupBox("🔧 Debug Settings")
         debug_layout = QVBoxLayout(debug_group)
         debug_layout.addWidget(QLabel("Debug output timeout (seconds):"))
@@ -168,17 +169,17 @@ class Configurator(QWidget):
         
         splitter.addWidget(config_widget)
         
-        # Output panel (right side)
+        # Output-panel (høyre side)
         output_group = QGroupBox("📋 Test Output")
         output_layout = QVBoxLayout(output_group)
         
-        # Output text area
+        # Tekstområde for output
         self.output = QTextEdit(self)
         self.output.setReadOnly(True)
         self.output.setFont(QFont("Consolas", 9))
         output_layout.addWidget(self.output)
         
-        # Output controls
+        # Kontroller for output
         output_controls = QHBoxLayout()
         self.btn_clear_output = QPushButton("Clear Output")
         self.btn_clear_output.clicked.connect(self.clear_output)
@@ -193,11 +194,11 @@ class Configurator(QWidget):
         output_layout.addLayout(output_controls)
         splitter.addWidget(output_group)
         
-        # Set splitter proportions (60% config, 40% output)
+        # Setter størrelsesforhold for splitter (60% config, 40% output)
         splitter.setSizes([360, 240])
         main_layout.addWidget(splitter)
         
-        # Bottom button panel
+        # Knappepanel nederst
         button_layout = QHBoxLayout()
         
         self.btn_save_config = QPushButton("💾 Save Config")
@@ -219,22 +220,24 @@ class Configurator(QWidget):
         self.setLayout(main_layout)
 
     def get_current_config(self) -> Config:
-        """Get configuration from current UI state."""
+        """Henter konfigurasjon fra gjeldende UI-tilstand."""
+        self.logger.info("Henter gjeldende konfigurasjon fra UI.")
         config = Config()
         config.number_of_messages = self.spin_count.value()
         config.wait_time_seconds = self.spin_wait.value()
         config.language_choice = self.combo_language.currentData()
         config.window_title_regex = self.edit_window_regex.toPlainText().strip()
         config.debug_output_timeout = self.spin_debug_timeout.value()
-        config.regenerate_sample_messages()  # Vil nå bruke riktig språk
+        config.regenerate_sample_messages() # Vil nå bruke riktig språk
         return config
 
     def load_config_to_ui(self, config: Config):
-        """Load configuration into UI components."""
+        """Laster konfigurasjon inn i UI-komponenter."""
+        self.logger.info("Laster konfigurasjon til UI.")
         self.spin_count.setValue(config.number_of_messages)
         self.spin_wait.setValue(config.wait_time_seconds)
         
-        # Finn indeksen som korresponderer til språkvalget og sett den
+        # Finner indeksen som korresponderer til språkvalget og setter den
         index = self.combo_language.findData(config.language_choice)
         if index != -1:
             self.combo_language.setCurrentIndex(index)
@@ -244,37 +247,43 @@ class Configurator(QWidget):
         self.show_preview()
 
     def save_config(self):
-        """Save current configuration to file."""
+        """Lagrer gjeldende konfigurasjon til fil."""
+        self.logger.info("Lagre konfigurasjon-knapp trykket.")
         filename, _ = QFileDialog.getSaveFileName(
             self, "Save Configuration", "config.json", "JSON files (*.json)"
         )
         if filename:
             try:
-                config = self.get_current_config()
-                config.save_to_file(filename)
+                config_to_save = self.get_current_config()
+                config_to_save.save_to_file(filename)
+                self.logger.info(f"Konfigurasjon lagret til {filename}")
                 QMessageBox.information(self, "Saved", f"Configuration saved to {filename}")
             except Exception as e:
+                self.logger.error(f"Klarte ikke å lagre konfigurasjon: {e}", exc_info=True)
                 QMessageBox.critical(self, "Error", f"Failed to save configuration: {e}")
 
     def load_config(self):
-        """Load configuration from file."""
+        """Laster konfigurasjon fra fil."""
+        self.logger.info("Last inn konfigurasjon-knapp trykket.")
         filename, _ = QFileDialog.getOpenFileName(
             self, "Load Configuration", "config.json", "JSON files (*.json)"
         )
         if filename:
             try:
-                config = Config.load_from_file(filename)
-                self.load_config_to_ui(config)
+                self.config = Config.load_from_file(filename)
+                self.load_config_to_ui(self.config)
+                self.logger.info(f"Konfigurasjon lastet fra {filename}")
                 QMessageBox.information(self, "Loaded", f"Configuration loaded from {filename}")
             except Exception as e:
+                self.logger.error(f"Klarte ikke å laste konfigurasjon: {e}", exc_info=True)
                 QMessageBox.critical(self, "Error", f"Failed to load configuration: {e}")
 
     def show_preview(self):
-        """Update the message preview."""
+        """Oppdaterer forhåndsvisningen av meldinger."""
         try:
             config = self.get_current_config()
             if config.sample_messages:
-                preview_messages = config.sample_messages[:5]  # Show first 5 messages
+                preview_messages = config.sample_messages[:5]  # Viser de første 5 meldingene
                 preview_text = "\n".join(f"{i+1}. {msg}" for i, msg in enumerate(preview_messages))
                 if len(config.sample_messages) > 5:
                     preview_text += f"\n... and {len(config.sample_messages) - 5} more messages"
@@ -283,40 +292,43 @@ class Configurator(QWidget):
             
             self.preview.setPlainText(preview_text)
         except Exception as e:
+            self.logger.warning(f"Feil ved generering av forhåndsvisning: {e}")
             self.preview.setPlainText(f"Error generating preview: {e}")
 
     def start_test(self):
-        """Start the stress test in a separate thread."""
+        """Starter stresstesten i en separat tråd."""
         if self.thread and self.thread.isRunning():
+            self.logger.warning("Forsøkte å starte en test mens en annen kjører.")
             QMessageBox.warning(self, "Test Running", "A test is already running. Please wait for it to complete.")
             return
         
         try:
-            # Get current configuration
+            # Henter gjeldende konfigurasjon
             self.config = self.get_current_config()
             
-            # Validate configuration
+            # Validerer konfigurasjonen
             self.config.validate()
             
-            # Clear output
+            # Tømmer output
             self.clear_output()
             self.append_output("🚀 Starting stress test...")
+            self.logger.info("Starter stresstest...")
             
-            # Create worker and thread
+            # Oppretter worker og tråd
             self.thread = QThread(self)
             self.worker = StressTestWorker(self.config)
             self.worker.moveToThread(self.thread)
             
-            # Set up timeout protection
+            # Setter opp tidsavbruddsbeskyttelse
             estimated_time = (self.config.number_of_messages * self.config.wait_time_seconds + 60) * 1000
-            timeout_ms = min(estimated_time, 300000)  # Max 5 minutes
+            timeout_ms = min(estimated_time, 300000)  # Maks 5 minutter
             
             self.test_timeout_timer = QTimer(self)
             self.test_timeout_timer.setSingleShot(True)
             self.test_timeout_timer.timeout.connect(self.on_test_timeout)
             self.test_timeout_timer.start(int(timeout_ms))
             
-            # Connect signals
+            # Kobler signaler
             self.thread.started.connect(self.worker.run)
             self.worker.finished.connect(self.on_test_finished)
             self.worker.finished.connect(self.thread.quit)
@@ -326,20 +338,22 @@ class Configurator(QWidget):
             self.worker.progress.connect(self.append_output)
             self.worker.error.connect(self.on_worker_error)
             
-            # Update UI state
+            # Oppdaterer UI-tilstand
             self.btn_start.setText("🔄 Running...")
             self.btn_start.setEnabled(False)
             
-            # Start the thread
+            # Starter tråden
             self.thread.start()
             
         except Exception as e:
+            self.logger.error(f"Klarte ikke å starte testen: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"Failed to start test: {e}")
             self.btn_start.setText("✅ Start Test")
             self.btn_start.setEnabled(True)
 
     def on_test_timeout(self):
-        """Handle test timeout to prevent indefinite hanging."""
+        """Håndterer tidsavbrudd for å forhindre at applikasjonen henger."""
+        self.logger.warning("Testen timet ut, avslutter worker-tråden.")
         self.append_output("⏰ Test timed out - terminating worker thread...")
         
         if self.worker:
@@ -347,7 +361,7 @@ class Configurator(QWidget):
         
         if self.thread and self.thread.isRunning():
             self.thread.quit()
-            if not self.thread.wait(5000):  # Wait up to 5 seconds
+            if not self.thread.wait(5000):  # Venter opptil 5 sekunder
                 self.thread.terminate()
                 self.thread.wait()
         
@@ -355,21 +369,23 @@ class Configurator(QWidget):
         QMessageBox.warning(self, "Timeout", "The test has timed out and was terminated.")
 
     def on_worker_error(self, error_message: str):
-        """Handle errors from worker thread."""
+        """Håndterer feil fra worker-tråden."""
+        self.logger.error(f"Feil i worker: {error_message}")
         self.append_output(f"❌ Worker error: {error_message}")
 
     def on_test_finished(self):
-        """Handle test completion."""
-        # Reset UI state
+        """Håndterer fullføring av testen."""
+        self.logger.info("Testen er ferdig.")
+        # Tilbakestiller UI-tilstand
         self.btn_start.setText("✅ Start Test")
         self.btn_start.setEnabled(True)
         
-        # Clean up timeout timer
+        # Rengjør tidsavbruddstimer
         if self.test_timeout_timer:
             self.test_timeout_timer.stop()
             self.test_timeout_timer = None
         
-        # Get results if available
+        # Henter resultater hvis tilgjengelig
         if self.worker:
             try:
                 result = self.worker.get_result()
@@ -388,9 +404,10 @@ class Configurator(QWidget):
                         QMessageBox.warning(self, "Test Completed", f"Test completed with issues. Sent {success_count}/{total_messages} messages.")
                 
             except Exception as e:
+                self.logger.warning(f"Feil ved henting av testresultater: {e}")
                 self.append_output(f"⚠️ Error getting test results: {e}")
         
-        # Clean up worker
+        # Rengjør worker
         if self.worker:
             self.worker.cleanup()
             self.worker = None
@@ -398,7 +415,7 @@ class Configurator(QWidget):
         self.thread = None
 
     def append_output(self, text: str):
-        """Append text to output area and scroll to bottom."""
+        """Legger til tekst i output-området og ruller til bunnen."""
         cursor = self.output.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(text)
@@ -408,11 +425,13 @@ class Configurator(QWidget):
         self.output.ensureCursorVisible()
 
     def clear_output(self):
-        """Clear the output area."""
+        """Tømmer output-området."""
+        self.logger.info("Tømmer output-loggen.")
         self.output.clear()
 
     def save_log(self):
-        """Save the current output log to a file."""
+        """Lagrer gjeldende output-logg til en fil."""
+        self.logger.info("Lagre logg-knapp trykket.")
         filename, _ = QFileDialog.getSaveFileName(
             self, "Save Log", "test_log.txt", "Text files (*.txt)"
         )
@@ -420,13 +439,16 @@ class Configurator(QWidget):
             try:
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(self.output.toPlainText())
+                self.logger.info(f"Logg lagret til {filename}")
                 QMessageBox.information(self, "Saved", f"Log saved to {filename}")
             except Exception as e:
+                self.logger.error(f"Klarte ikke å lagre loggen: {e}", exc_info=True)
                 QMessageBox.critical(self, "Error", f"Failed to save log: {e}")
 
     def closeEvent(self, event):
-        """Handle window close event with proper cleanup."""
+        """Håndterer lukking av vinduet med korrekt opprydding."""
         if self.thread and self.thread.isRunning():
+            self.logger.info("Avslutningsforespørsel mens testen kjører.")
             reply = QMessageBox.question(
                 self, "Test Running", 
                 "A test is currently running. Do you want to stop it and exit?",
@@ -434,7 +456,8 @@ class Configurator(QWidget):
             )
             
             if reply == QMessageBox.StandardButton.Yes:
-                # Stop the test
+                self.logger.info("Brukeren valgte å stoppe testen og avslutte.")
+                # Stopper testen
                 if self.worker:
                     self.worker.stop()
                 
@@ -445,25 +468,26 @@ class Configurator(QWidget):
                 
                 event.accept()
             else:
+                self.logger.info("Brukeren valgte å ikke avslutte.")
                 event.ignore()
         else:
             event.accept()
 
 
 def main():
-    """Main function for running the GUI application."""
+    """Hovedfunksjon for å kjøre GUI-applikasjonen."""
     if not PYSIDE6_AVAILABLE:
         print("❌ PySide6 not available. Please install with: pip install PySide6")
         return 1
     
     app = QApplication(sys.argv)
     
-    # Set application properties
+    # Setter applikasjonsegenskaper
     app.setApplicationName("Language Crash Test")
     app.setApplicationVersion("2.0.0")
     app.setOrganizationName("Language Crash Test Project")
     
-    # Create and show main window
+    # Oppretter og viser hovedvinduet
     window = Configurator()
     window.show()
     
@@ -471,5 +495,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # Setter opp grunnleggende logging for GUI-modulen
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     sys.exit(main())
-
