@@ -39,5 +39,8 @@
     "gui_min_width": 600,
     "gui_min_height": 500,
     "debug_script_path": "copilot_ui_debug.py",
-    "debug_output_timeout": 30
+    "debug_output_timeout": 30,
+    "copilot_launch_command": "explorer.exe ms-copilot://",
+    "launch_if_not_found": true
 }
+

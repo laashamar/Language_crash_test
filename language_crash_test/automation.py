@@ -11,6 +11,7 @@ Key Features:
 - Comprehensive error handling and logging
 - Thread-safe operation for GUI integration
 - Configuration-driven UI element detection
+- Automatic application launch if not running
 """
 
 import time
@@ -34,7 +35,8 @@ except ImportError:
     WINDOWS_AVAILABLE = False
     class Application:
         def __init__(self, backend=None): pass
-        def connect(self, title_re=None): return self
+        def start(self, cmd_line): return self
+        def connect(self, title_re=None, timeout=None): return self
         def window(self, title_re=None): return self
     class ElementNotFoundError(Exception): pass
     class MatchError(Exception): pass
@@ -286,13 +288,36 @@ def run_stress_test_logic(config, logger) -> Dict[str, Any]:
 
     success_count = 0
     try:
-        logger.info("🔗 Connecting to Copilot window...")
-        app = Application(backend="uia").connect(title_re=config.window_title_regex)
-        window = app.window(title_re=config.window_title_regex)
-        logger.info(f"✅ Connected to Copilot window with regex: {config.window_title_regex}")
+        # NY LOGIKK: Prøv å koble til, hvis det feiler, prøv å starte
+        try:
+            logger.info("🔗 Attempting to connect to existing Copilot window...")
+            app = Application(backend="uia").connect(title_re=config.window_title_regex, timeout=5)
+            window = app.window(title_re=config.window_title_regex)
+            logger.info(f"✅ Found existing Copilot window.")
+        except (ElementNotFoundError, MatchError):
+            logger.warning("⚠️ Could not find running Copilot window.")
+            if config.launch_if_not_found:
+                logger.info(f"🚀 Launching Copilot using command: '{config.copilot_launch_command}'...")
+                try:
+                    Application(backend="uia").start(config.copilot_launch_command)
+                    logger.info("⏳ Waiting 10 seconds for Copilot to initialize...")
+                    time.sleep(10)
+
+                    logger.info("🔗 Re-attempting to connect after launch...")
+                    app = Application(backend="uia").connect(title_re=config.window_title_regex, timeout=15)
+                    window = app.window(title_re=config.window_title_regex)
+                    logger.info("✅ Successfully connected to newly launched Copilot window.")
+                except Exception as launch_error:
+                    error_msg = f"❌ Failed to launch or connect to Copilot after launch: {launch_error}"
+                    logger.critical(error_msg)
+                    return {'success': 0, 'total': config.number_of_messages, 'error': error_msg}
+            else:
+                error_msg = "❌ Could not find Copilot window and auto-launch is disabled in config."
+                logger.critical(error_msg)
+                return {'success': 0, 'total': config.number_of_messages, 'error': error_msg}
 
         if not validate_window(window, logger):
-            error_msg = "❌ Window validation failed"
+            error_msg = "❌ Window validation failed after connection attempt."
             logger.error(error_msg)
             return {'success': 0, 'total': config.number_of_messages, 'error': error_msg}
 
@@ -359,3 +384,4 @@ def run_stress_test_logic(config, logger) -> Dict[str, Any]:
         error_msg = f"❌ An unexpected critical error occurred: {type(e).__name__}: {e}"
         logger.critical(error_msg)
         return {'success': 0, 'total': config.number_of_messages, 'error': error_msg}
+

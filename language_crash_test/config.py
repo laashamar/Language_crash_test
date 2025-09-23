@@ -61,6 +61,10 @@ class Config:
     # Debug configuration
     debug_script_path: str = "copilot_ui_debug.py"
     debug_output_timeout: int = 30
+
+    # Application launch configuration
+    copilot_launch_command: str = "explorer.exe ms-copilot://"
+    launch_if_not_found: bool = True
     
     def __post_init__(self):
         """Initialize default values for list fields and generate messages."""
@@ -116,7 +120,11 @@ class Config:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Config':
         """Create config instance from dictionary (JSON deserialization)."""
-        return cls(**data)
+        # Get all field names from the class definition
+        class_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        # Filter the input data to only include keys that are actual fields
+        filtered_data = {k: v for k, v in data.items() if k in class_fields}
+        return cls(**filtered_data)
     
     def save_to_file(self, filepath: str) -> None:
         """
@@ -243,3 +251,4 @@ if __name__ == "__main__":
     # Cleanup
     os.remove("test_config.json")
     print("🧹 Cleaned up test file")
+
